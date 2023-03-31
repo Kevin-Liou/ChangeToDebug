@@ -2,12 +2,8 @@ name: Test-build
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
-
+    tags:
+      - test-build*
 jobs:
   build:
     runs-on: windows-latest
@@ -29,7 +25,7 @@ jobs:
       - name: Build with PyInstaller for windows
         run: |
           pyinstaller `
-            --onefile ChangeToDebug_Start.py `
+            --onefile -w ChangeToDebug_Start.py `
             --python-option u `
 
       - name: Set VERSION variable for windows

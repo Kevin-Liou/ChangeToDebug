@@ -1,6 +1,9 @@
 name: ReleasePkg Build Release
 
 on:
+  push:
+    tags:
+      - v*
 jobs:
   build:
     runs-on: windows-latest
@@ -16,8 +19,8 @@ jobs:
       run: |
         chcp 65001
         echo ("RELEASE_VERSION=" + $env:GITHUB_REF.replace('refs/tags/', '')) >> $env:GITHUB_ENV
-        echo ("RELEASE_TITLE=ReleasePkg_" + $env:GITHUB_REF.replace('refs/tags/', '') + "_windows_64bit") >> $env:GITHUB_ENV
-        echo ("RELEASE_FILENAME=ReleasePkg_" + $env:GITHUB_REF.replace('refs/tags/', '') + "_windows_64bit.zip") >> $env:GITHUB_ENV
+        echo ("RELEASE_TITLE=ChangeToDebug" + $env:GITHUB_REF.replace('refs/tags/', '') + "_windows_64bit") >> $env:GITHUB_ENV
+        echo ("RELEASE_FILENAME=ChangeToDebug_" + $env:GITHUB_REF.replace('refs/tags/', '') + "_windows_64bit.zip") >> $env:GITHUB_ENV
         git fetch --tags --force
     - name: Get tag message
       id: tag_data
@@ -39,11 +42,11 @@ jobs:
         pip install pyinstaller
     - name: Build with PyInstaller for windows
       run: |
-        pyinstaller --noconfirm --distpath %cd%\ --onefile %cd%\ReleasePkg.py
+        pyinstaller --noconfirm --distpath %cd%\ --onefile -w %cd%\ChangeToDebug_Start.py
       shell: cmd
 
     - name: Archive release
-      run: 7z a -tzip ${{ env.RELEASE_FILENAME }} ReleasePkg.exe
+      run: 7z a -tzip ${{ env.RELEASE_FILENAME }} ChangeToDebug_Start.exe
 
     - name: Create Release
       id: create_release
