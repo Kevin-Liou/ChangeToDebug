@@ -24,7 +24,7 @@ from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 
-Version = "1.0.0"
+Version = "1.1.0"
 
 current_path = os.getcwd()
 file_name = "PlatformPcdConfig.dsc"
@@ -91,6 +91,7 @@ def Find_C_file(print_func, input_text, debug_mode):
             for root, dirs, files in os.walk(path):
                 for file in files:
                     if file.endswith(".c") and file == text:
+                        # Find C file
                         print_func("Find file: " + os.path.join(root, file))
                         found_flag = True
                         if debug_mode == "memory":
@@ -187,6 +188,7 @@ def get_indentation(line):
         i += 1
     return line[:i]
 
+# log window
 class Dialog(QtWidgets.QDialog, Ui_ChangeToDebug_log.Ui_Log):
     def __init__(self, parent=None):
         super(Dialog, self).__init__(parent)
@@ -194,22 +196,55 @@ class Dialog(QtWidgets.QDialog, Ui_ChangeToDebug_log.Ui_Log):
         self.setup_control()
 
     def setup_control(self):
+        # Connect the "End" button to its handler
         self.pushButton.clicked.connect(self.on_end_button_clicked)
 
     def append_message(self, message):
+        # Append the message to the text edit, color "Success" messages in green
         if "Success" in message:
             parts = message.split("Success")
             message = f'{parts[0]}<span style="color:green">Success</span>{"".join(parts[1:])}'
         self.textEdit.insertHtml(message + '<br>')
 
     def on_end_button_clicked(self):
+        # Close the application when the "End" button is clicked
         QtWidgets.QApplication.quit()
 
+# about window
 class AboutDialog(QtWidgets.QDialog, Ui_ChangeToDebug_about.Ui_About):
     def __init__(self, parent=None):
         super(AboutDialog, self).__init__(parent)
         self.setupUi(self)
 
+# Qthread to send message class
+class Worker(QThread):
+    # Define a PyQt signal to send messages from the worker thread
+    message = pyqtSignal(str)
+
+    def __init__(self, input_text, debug_mode):
+        super(Worker, self).__init__()
+        self.input_text = input_text
+        self.debug_mode = debug_mode
+
+    def run(self):
+        # processing based on the debug_mode and the provided input_text
+        if not os.path.exists(current_path + "\HpPlatformPkg"):
+            self.message.emit("Please put this tool into the code...")
+            return
+        if self.debug_mode == "memory" and len(self.input_text) != 0:
+            self.message.emit("Start to change to memory debug mode...")
+            EnablePcdHpMemoryDebugEnable(self.message.emit)
+            ReplaceIsLegacySupported(self.message.emit)
+            Find_C_file(self.message.emit, self.input_text, self.debug_mode)
+        elif self.debug_mode == "single driver" and len(self.input_text) != 0:
+            self.message.emit("Start to change to single driver debug mode...")
+            Find_C_file(self.message.emit, self.input_text, self.debug_mode)
+        elif len(self.input_text) == 0:
+            self.message.emit("You didn't enter anything...")
+        else:
+            self.message.emit("WTF...")
+
+# main window
 class myMainWindow(QtWidgets.QMainWindow, Ui_ChangeToDebug_main.Ui_MainWindow):
     def __init__(self, parent=None):
         super(myMainWindow, self).__init__(parent)
@@ -218,38 +253,34 @@ class myMainWindow(QtWidgets.QMainWindow, Ui_ChangeToDebug_main.Ui_MainWindow):
         self.message_dialog = Dialog(self)
 
     def setup_control(self):
+        # Connect the "Start" button and the "About" menu action to their handlers
         self.pushButton.clicked.connect(self.buttonClicked)
         self.actionAbout.triggered.connect(self.open_about_dialog)
 
     def print_and_log(self, message):
+        # Print the message
         print(message)
         self.message_dialog.append_message(message)
 
     def buttonClicked(self):
+        # Show the message dialog, process input_text and debug_mode
         self.message_dialog.show()
 
         input_text = self.plainTextEdit.toPlainText()
         input_text = input_text.splitlines()
         debug_mode = ""
-        if not os.path.exists(current_path + "\HpPlatformPkg"):
-            self.print_and_log("Please put this tool into the code...")
-            return
         if self.radioButton.isChecked() and len(input_text) != 0:
-            self.print_and_log("Start to change to memory debug mode...")
             debug_mode = "memory"
-            EnablePcdHpMemoryDebugEnable(self.print_and_log)
-            ReplaceIsLegacySupported(self.print_and_log)
-            Find_C_file(self.print_and_log, input_text, debug_mode)
         elif self.radioButton_2.isChecked() and len(input_text) != 0:
-            self.print_and_log("Start to change to single driver debug mode...")
             debug_mode = "single driver"
-            Find_C_file(self.print_and_log, input_text, debug_mode)
-        elif len(input_text) == 0:
-            self.print_and_log("You didn't enter anything...")
-        else:
-            self.print_and_log("WTF...")
+
+        # Create and start a Worker thread with the provided input_text and debug_mode
+        self.worker = Worker(input_text, debug_mode)
+        self.worker.message.connect(self.print_and_log)
+        self.worker.start()
 
     def open_about_dialog(self):
+        # Show the AboutDialog when the "About" menu action is triggered
         self.about_dialog = AboutDialog(self)
         self.about_dialog.show()
 
