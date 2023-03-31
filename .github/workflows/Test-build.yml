@@ -1,4 +1,4 @@
-name: ReleasePkg Build
+name: Test-build
 
 on:
   push:
