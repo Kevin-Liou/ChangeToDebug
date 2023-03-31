@@ -17,12 +17,14 @@ Returns:
 None. The program makes modifications directly to the specified files in the user's file system.
 """
 
-import os, sys, Ui_ChangeToDebug_main, Ui_ChangeToDebug_log, Ui_ChangeToDebug_about
+import os, logging, argparse, Ui_ChangeToDebug_main, Ui_ChangeToDebug_log, Ui_ChangeToDebug_about
 
 from PyQt5 import QtGui, QtCore, QtWidgets
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
+
+Version = "1.0.0"
 
 current_path = os.getcwd()
 file_name = "PlatformPcdConfig.dsc"
@@ -35,6 +37,17 @@ directory2 = "\HpPe\HpCommonPkg\MemoryDebug\Dxe\DxeMemDebugAcpiArea\\"
 old_string2 = "IsLegacySupported()"
 
 need_process_folder = ["\HpPlatformPkg", "\HpPe", "\Edk2", "\Edk2Platforms", "\HpCore", "\HpEpsc", "\HpIntel", "\Intel"]
+
+def argparse_function(ver):
+    parser = argparse.ArgumentParser(prog='ReleasePkg.py', description='Tutorial')
+    parser.add_argument("-d", "--debug", help='Show debug message.', action="store_true")
+    parser.add_argument("-v", "--version", action="version", version=ver)
+    args = parser.parse_args()
+    if args.debug:
+        Debug_Format = "%(levelname)s, %(funcName)s: %(message)s"
+        logging.basicConfig(level=logging.DEBUG, format=Debug_Format)  #Debug use flag
+        print("Enable debug mode.")
+    return ver
 
 # Enable PcdHpMemoryDebugEnable
 def EnablePcdHpMemoryDebugEnable(print_func):
