@@ -1,12 +1,13 @@
-from PyQt5 import QtWidgets
+"""ChangeToDebug 進入點。
 
-from ChangeToDebug_Controller import *
+實作已整合至 changetodebug 套件：
+    changetodebug/core   修補引擎、profile 載入、各功能 task
+    changetodebug/gui    PyQt5 介面
+"""
 
-if __name__ == '__main__':
-    import sys
+import sys
 
-    args = argparse_function(Version)
-    app = QtWidgets.QApplication(sys.argv)
-    window = myMainWindow()
-    window.show()
-    sys.exit(app.exec_())
+from changetodebug.app import main
+
+if __name__ == "__main__":
+    sys.exit(main())

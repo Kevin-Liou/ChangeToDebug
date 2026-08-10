@@ -1,0 +1,291 @@
+# ============================================================
+# FY25 專案世代設定（Meteor Lake）
+#
+# 此檔由 ChangeToDebug 自動載入；修改後在 GUI 按「重新載入設定檔」即可生效。
+# 欄位說明請見 profiles/_TEMPLATE.yaml.example。
+# ============================================================
+profile:
+  key: FY25
+  display_name: FY25 (Meteor Lake)
+  description: HP FY25 code，已驗證版本 v92.09.00
+  priority: 25
+  detect:
+    any:
+      - dir: .gitman/Intel/MeteorLakeBoardPkg
+  pcd_scan_roots:
+    - HpPlatformPkg/MultiProject
+
+modifications:
+- sub_path: .gitman/Edk2/MdePkg/Library/BaseLib/CpuDeadLoop.c
+  old_code: |2
+
+    {
+      volatile UINTN  Index;
+
+      for (Index = 0; Index == 0;) {
+        CpuPause ();
+      }
+    }
+  new_code: |2
+
+    {
+    //   volatile UINTN  Index;
+
+    //   for (Index = 0; Index == 0;) {
+    //     CpuPause ();
+    //   }
+    }
+- sub_path: .gitman/HpCoreMirror/Edk2/MdePkg/Library/BaseLib/CpuDeadLoop.c
+  old_code: |2
+
+    {
+      volatile UINTN  Index;
+
+      for (Index = 0; Index == 0;) {
+        CpuPause ();
+      }
+    }
+  new_code: |2
+
+    {
+    //   volatile UINTN  Index;
+
+    //   for (Index = 0; Index == 0;) {
+    //     CpuPause ();
+    //   }
+    }
+- sub_path: .gitman/HpCoreMirror/HpUnitTestPkg/Edk2/MdePkg/Library/BaseLib/CpuDeadLoop.c
+  old_code: |2
+
+    {
+      volatile UINTN  Index;
+
+      for (Index = 0; Index == 0;) {
+        CpuPause ();
+      }
+    }
+  new_code: |2
+
+    {
+    //   volatile UINTN  Index;
+
+    //   for (Index = 0; Index == 0;) {
+    //     CpuPause ();
+    //   }
+    }
+- sub_path: .gitman/HpIntel/HpIntelChipsetPkg/HpRcPolicyWmiSmm/HpRcPolicyWmiSmm.c
+  old_code: |2
+
+         DEBUG ((EFI_D_ERROR, "  Allocate zero pool fail \n", ));
+  new_code: |2
+
+         DEBUG ((EFI_D_ERROR, "  Allocate zero pool fail \n"));
+- sub_path: .gitman/HpCoreMirror/HpTools/fixup.py
+  old_code: |2
+
+        if targets_with_local_modifications:
+            print("Stashing modified files before applying fixups")
+            print("(Use `git stash pop` to restore the modified files)")
+            repos = set(GetRepoRoot(file) for file in targets_with_local_modifications)
+            for repo in repos:
+                subprocess.run(["git", "stash", "push", "-m", "Auto stash by fixup.py"], cwd=repo, check=True)
+  new_code: |2
+
+        # if targets_with_local_modifications:
+        #     print("Stashing modified files before applying fixups")
+        #     print("(Use `git stash pop` to restore the modified files)")
+        #     repos = set(GetRepoRoot(file) for file in targets_with_local_modifications)
+        #     for repo in repos:
+        #         subprocess.run(["git", "stash", "push", "-m", "Auto stash by fixup.py"], cwd=repo, check=True)
+- sub_path: .gitman/HpCoreMirror/HpTools/fixup.py
+  old_code: |2
+
+        if targets_with_local_modifications:
+            print("Stashing modified files before applying fixups")
+            print("(Use `git stash pop` to restore the modified files)")
+            repos = set(get_repo_root(file) for file in targets_with_local_modifications)
+            for repo in repos:
+                subprocess.run(
+                    ["git", "stash", "push", "-m", "Auto stash by fixup.py"],
+                    cwd=repo,
+                    check=True,
+                )
+  new_code: |2
+
+        # if targets_with_local_modifications:
+        #     print("Stashing modified files before applying fixups")
+        #     print("(Use `git stash pop` to restore the modified files)")
+        #     repos = set(get_repo_root(file) for file in targets_with_local_modifications)
+        #     for repo in repos:
+        #         subprocess.run(
+        #             ["git", "stash", "push", "-m", "Auto stash by fixup.py"],
+        #             cwd=repo,
+        #             check=True,
+        #         )
+- sub_path: .gitman/Intel/ClientOneSiliconPkg/IpBlock/P2sb/LibraryPrivate/PeiDxeSmmP2SbSidebandAccessLib/PeiDxeSmmP2SbSidebandAccessLib.c
+  old_code: |2
+
+      if (PciSegmentRead16 (P2sbBase + PCI_VENDOR_ID_OFFSET) == 0xFFFF) {
+        ASSERT (FALSE);
+        return EFI_DEVICE_ERROR;
+  new_code: |2
+
+      if (PciSegmentRead16 (P2sbBase + PCI_VENDOR_ID_OFFSET) == 0xFFFF) {
+        // ASSERT (FALSE);
+        return EFI_DEVICE_ERROR;
+- sub_path: .gitman/HpFeature/HpFeature/HpConnectionDevicePkg/PubSrcPkg/HpWireless/DT/WirelessDevsDxe/WirelessDevsDxe.c
+  old_code: |2
+
+                );
+       ASSERT_EFI_ERROR (Status);
+
+       Status = gBS->LocateHandleBuffer (
+  new_code: |2
+
+                );
+       // ASSERT_EFI_ERROR (Status);
+
+       Status = gBS->LocateHandleBuffer (
+- sub_path: HpPlatformPkg/BuildOptions.dsc
+  old_code: |2
+
+    !if $(DEBUG_MESSAGE_ENABLE) == TRUE
+       DEFINE DEBUG_BUILD_OPTIONS = /D EFI_DEBUG /D DEBUG_MODE=1 /DEDKII_GLUE_DebugPrintErrorLevel=(EFI_D_LOAD+EFI_D_ERROR+EFI_D_INFO+EFI_D_WARN+EFI_D_EVENT)
+    !endif
+  new_code: |2
+
+    # !if $(DEBUG_MESSAGE_ENABLE) == TRUE
+       DEFINE DEBUG_BUILD_OPTIONS = /D EFI_DEBUG /D DEBUG_MODE=1 /DEDKII_GLUE_DebugPrintErrorLevel=(EFI_D_LOAD+EFI_D_ERROR+EFI_D_INFO+EFI_D_WARN+EFI_D_EVENT)
+    # !endif
+- sub_path: HpPlatformPkg/PlatformPkg.dsc
+  old_code: |2
+
+      # defined, then debug and assert related macros wrapped by it are the NULL implementations.
+      DEFINE DEBUG_BUILD_OPTIONS = -D MDEPKG_NDEBUG -D NDEBUG
+  new_code: |2
+
+      # defined, then debug and assert related macros wrapped by it are the NULL implementations.
+      DEFINE DEBUG_BUILD_OPTIONS =
+- sub_path: .gitman/HpFeature/HpFeature/HpFeatureErrorHandling/PubSrcPkg/RtsCallbackHandler/PostCode/PostCode.c
+  old_code: |2
+
+      UINT8  PostCodeInCmos;
+
+      //
+      // PostCode save to CMOS
+      //
+  new_code: |2
+
+      UINT8  PostCodeInCmos;
+      IoWrite8(0x80, (UINT8)Value);
+      IoWrite8(0x81, (UINT8)(Value >> 8));
+      //
+      // PostCode save to CMOS
+      //
+# ------------------------------------------------------------
+# option_debug_flag 說明
+# ------------------------------------------------------------
+# 用途：區分「必要修改」與「可選的大量除錯輸出」兩種層級，避免日常開發被過量訊息干擾。
+#
+# 套用規則（由工具 GUI 的「啟用所有 Debug Flag」控制）：
+# - option_debug_flag: false
+#     → 視為「必要變更」。不論是否勾選「啟用所有 Debug Flag」，都會套用。
+#     → 典型用途：PostCode 走序列埠、提升 ErrorLevel 等基本 Debug 能力。
+#
+# - option_debug_flag: true
+#     → 視為「選配型除錯變更」。只有在勾選「啟用所有 Debug Flag」時才會套用。
+#     → 典型用途：一次打開大量子系統的 DEBUG 訊息、ACPI 詳細偵錯、影響範圍大的設定。
+#
+# 建議使用準則：
+# - 設為 false：問題定位必備、風險小、輸出量可控、常駐也不影響效能。
+# - 設為 true ：會顯著增加 log 量、可能影響時序或效能、只在深入偵錯/重現低機率問題時使用。
+# ------------------------------------------------------------
+platform_pcd_modifications:
+- option_debug_flag: false
+  file_name: PlatformPcdConfig.dsc
+  old_code: |2
+
+       gHpCommonPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable|FALSE
+  new_code: |2
+
+       gHpCommonPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable|TRUE
+- option_debug_flag: false
+  file_name: PlatformPcdConfig.dsc
+  old_code: |2
+
+       gEfiMdePkgTokenSpaceGuid.PcdDebugPrintErrorLevel|0x80000046
+  new_code: |2
+
+       gEfiMdePkgTokenSpaceGuid.PcdDebugPrintErrorLevel|0x80080046
+- option_debug_flag: false
+  file_name: HpFeatureMiscConfig.dsc
+  old_code: |2
+
+       gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable | FALSE
+  new_code: |2
+
+       gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable | TRUE
+- option_debug_flag: true
+  file_name: HpConnectionDeviceConfig.dsc
+  old_code: |2
+
+       ## PCD to enable all of Connection Device debug message.
+       gEfiHpConDevPkgTokenSpaceGuid.PcdConDevEnableAllDebugMSG   |FALSE
+  new_code: |2
+
+       ## PCD to enable all of Connection Device debug message.
+       gEfiHpConDevPkgTokenSpaceGuid.PcdConDevEnableAllDebugMSG   |TRUE
+- option_debug_flag: true
+  file_name: ChipsetPcdConfig.dsc
+  old_code: |2
+
+       gSiPkgTokenSpaceGuid.PcdAcpiDebugEnableFlag|FALSE
+  new_code: |2
+
+       gSiPkgTokenSpaceGuid.PcdAcpiDebugEnableFlag|TRUE
+- option_debug_flag: true
+  file_name: PlatformPcdConfig.dsc
+  old_code: |2
+
+    DEFINE HP_CLEAR_PASSWORD_JUMPER_SUPPORT = FALSE
+
+    [PcdsFeatureFlag]
+  new_code: |2
+
+    DEFINE HP_CLEAR_PASSWORD_JUMPER_SUPPORT = FALSE
+
+    ################DEBUG FLAG##########################
+    DEFINE BOOT_OPTIONS_DEBUG_MSG = TRUE
+    DEFINE HP_FEATURE_MISC_DEBUG_MSG = TRUE
+    DEFINE HP_BOOT_PERFORMANCE_TABLE_DEBUG_MSG = TRUE
+    DEFINE HP_FEATURE_ERROR_HANDLING_DEBUG_MSG = TRUE
+    DEFINE HP_LID_SWITCHING_DEBUG_MSG = TRUE
+    DEFINE PORT_OPTIONS_DEBUG_MSG = TRUE
+    DEFINE POWER_MANAGEMENT_OPTIONS_DEBUG_MSG = TRUE
+    DEFINE POWER_CONTROL_DEBUG_MSG = TRUE
+    DEFINE HP_GFX_MISC_DEBUG_MSG = TRUE
+    DEFINE PREBOOT_DISPLAY_CLONE_MODE_DEBUG_MSG = TRUE
+    DEFINE ADDON_GFX_POLICY_DEBUG_MSG = TRUE
+    DEFINE SYSTEM_OPTIONS_DEBUG_MSG = TRUE
+    DEFINE NVIDIA_GRAPHICS_DEBUG_MSG = TRUE
+    DEFINE HP_FEATURE_PRIVATE_WMI_DEBUG_MSG = TRUE
+    DEFINE BUILTIN_DEVICE_OPTIONS_DEBUG_MSG = TRUE
+    DEFINE HP_RTD3_PLATFORM_DEBUG_MSG = TRUE
+    DEFINE HP_USB_PORTCFG_DBG_MSG = TRUE
+    DEFINE USB_DOCK_PREBOOT_DISPLAY_DEBUG_MSG = TRUE
+    DEFINE INTEL_HYBRID_GRAPHICS_DEBUG_MSG = TRUE
+    DEFINE HP_INSTANT_ON_LOGO_ENABLE_DEBUG_MSG = TRUE
+    DEFINE INSTANT_ON_LOGO_DEBUG_MSG = TRUE
+    DEFINE INSTANT_ON_LOGO_PVT_DEBUG_MSG = TRUE
+    DEFINE HP_DIAGNOSTIC_DEBUG_MSG = TRUE
+    DEFINE HP_HUMAN_INTERFACE_DEVICES_DEBUG_MSG = TRUE
+    DEFINE HP_USBC_FIRMWARE_FLASH_DEBUG_MSG = TRUE
+    DEFINE HP_AUDIO_DEBUG_MSG = TRUE
+    DEFINE HP_THERMAL_DEBUG_MSG = TRUE
+    DEFINE CONDEV_ENABLE_ALL_DBG_MSG = TRUE
+    DEFINE HP_PELORI_DEBUG_ACPI_ADBG = TRUE
+
+    # DEFINE HP_GFX_ACPI_MEM_DEBUG_ENABLE = TRUE
+    ################DEBUG FLAG##########################
+
+    [PcdsFeatureFlag]

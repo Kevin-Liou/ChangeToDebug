@@ -1,0 +1,130 @@
+# ============================================================
+# 新增下一個世代（例如 FY27）的步驟
+# ------------------------------------------------------------
+# 1. 把這個檔案複製成 profiles\FY27.yaml
+# 2. 修改下面的 profile 區塊（key / display_name / detect）
+# 3. 填入 modifications 與 platform_pcd_modifications
+# 4. 開啟 ChangeToDebug，按「重新載入設定檔」
+#
+# 不需要修改任何 Python 程式碼。
+# 副檔名為 .example 或檔名以底線開頭的檔案不會被載入。
+# ============================================================
+
+profile:
+  # ---- 必填 ----
+  key: FY27                              # 內部代號，省略時取檔名
+  display_name: FY27 (Wildcat Lake)      # GUI 顯示名稱
+  description: HP FY27 code              # 說明文字（選填）
+
+  # 自動偵測順序；數字小的先被比對。同一路徑符合多個 profile 時取數字小者。
+  priority: 27
+
+  # ---- 自動偵測條件 ----
+  # any: 任一條命中即視為符合
+  # all: 必須全部命中（可與 any 併用；兩者都寫時要 all 全中且 any 至少中一條）
+  # 支援的判斷類型：dir（資料夾存在）、file（檔案存在）、exists（兩者皆可）、glob（萬用字元）
+  detect:
+    any:
+      - dir: .gitman/Intel/WildcatLakeBoardPkg
+    # all:
+    #   - file: HpPlatformPkg/PlatformPkg.dsc
+
+  # ---- platform_pcd_modifications 的掃描根目錄（可多個） ----
+  pcd_scan_roots:
+    - HpPlatformPkg/MultiProject
+
+  # ---- new_files 的來源目錄（有用到 new_files 才需要） ----
+  # 可以是絕對路徑，或相對於這個 YAML 所在的資料夾。
+  # 指向 code change 套件（例如 CodeChange\...\MOD）可以避免把 BIOS source 複製進工具 repo。
+  # new_files_dir: E:/SynologyDrive/.../MOD
+
+  # ---- Driver Debug 功能的專案相關設定（全部選填，省略即用內建預設值） ----
+  # driver_debug:
+  #   search_roots:                       # 搜尋 driver .c 檔的根目錄
+  #     - HpPlatformPkg
+  #     - HpPe
+  #     - Edk2
+  #     - .gitman
+  #   message_map:                        # 要升級的 DEBUG 等級
+  #     DEBUG_WARN: DEBUG_ERROR
+  #     DEBUG_INFO: DEBUG_ERROR
+  #   memory_debug:
+  #     pcd_scan_root: HpPlatformPkg/MultiProject
+  #     pcd_file: PlatformPcdConfig.dsc
+  #     pcd_pattern: '(PcdHpMemoryDebugEnable\s*\|\s*)FALSE'   # regex
+  #     pcd_replacement: '\1TRUE'
+  #     acpi_area_sub_path: HpPe/HpCommonPkg/MemoryDebug/Dxe/DxeMemDebugAcpiArea/DxeMemDebugAcpiArea.c
+  #     acpi_area_old: IsLegacySupported()
+  #     acpi_area_new: '0'
+  #     inf_package: HpCommonPkg/MemoryDebug/MemoryDebug.dec
+  #     inf_library: MemDebugLib
+
+
+# ============================================================
+# new_files：把 new_files_dir 底下的檔案複製到專案（用於 code change 帶了全新檔案的情況）
+# ------------------------------------------------------------
+# path       同時當作來源（相對 new_files_dir）與目標（相對專案根目錄）的路徑
+# source     來源路徑與目標不同時才需要（相對 new_files_dir，或絕對路徑）
+# target     同上
+# overwrite  目標已存在且內容不同時是否覆蓋，預設 false（不覆蓋，回報「已存在且不同」）
+#
+# 目標已存在且內容相同 → 視為已套用過；驗證階段會重新比對與來源檔是否一致。
+# 這些一定排在 modifications 之前執行。
+# ============================================================
+# new_files:
+#   - path: HpPlatformPkg/Include/Library/HpForceDebugLib.h
+#     note: 說明文字
+
+
+# ============================================================
+# modifications：以 sub_path 精準定位單一檔案
+# ------------------------------------------------------------
+# sub_path           相對於專案根目錄的路徑（用 / 或 \ 都可以）
+# old_code           要被取代的原始內容；用 |2 保留原始縮排與換行
+# new_code           取代後的內容
+# option_debug_flag  true  = 選配，只有勾選「啟用所有 Debug Flag」才套用
+#                    false = 必要，永遠套用（預設值）
+# regex              true 時 old_code 視為正規表示式、new_code 可用 \1 回填（選填）
+# label              GUI 清單顯示名稱（選填，預設顯示 sub_path）
+# note               備註，會顯示成滑鼠提示（選填）
+#
+# 「插入型」規則（new_code 完整包含 old_code，例如只是在原內容旁邊補幾行）是允許的：
+# 工具會先檢查 new_code 是否已存在，已存在就回報「已套用過」，重跑不會重複插入。
+#
+# label / note 若以 [ 開頭或含有冒號，記得用單引號括起來，否則會被 YAML 誤判。
+# ============================================================
+modifications:
+  - sub_path: .gitman/Edk2/MdePkg/Library/BaseLib/CpuDeadLoop.c
+    label: 停用 CpuDeadLoop 無窮迴圈
+    option_debug_flag: false
+    old_code: |2
+
+      {
+        volatile UINTN  Index;
+      }
+    new_code: |2
+
+      {
+        // volatile UINTN  Index;
+      }
+
+
+# ============================================================
+# platform_pcd_modifications：以 file_name 在 pcd_scan_roots 底下遞迴搜尋
+# 找到的每一個同名檔都會被套用（多專案共用時很方便）。
+# 欄位與 modifications 相同，只是用 file_name 取代 sub_path。
+#
+# file_name 可以用萬用字元（* ? []），用來涵蓋各專案自己命名的設定檔，例如
+#     file_name: 'Z*PkgConfig.dsc'
+# 會命中 Z21ManaanPkgConfig.dsc、Z22MekrosPkgConfig.dsc，但不會誤中 PlatformPkgConfig.dsc。
+# ============================================================
+platform_pcd_modifications:
+  - file_name: PlatformPcdConfig.dsc
+    label: PostCode 導向序列埠
+    option_debug_flag: false
+    old_code: |2
+
+         gHpCommonPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable|FALSE
+    new_code: |2
+
+         gHpCommonPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable|TRUE

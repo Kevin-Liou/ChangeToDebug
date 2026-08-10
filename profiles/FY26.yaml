@@ -1,0 +1,438 @@
+# ============================================================
+# FY26 專案世代設定（Panther Lake）
+#
+# 此檔由 ChangeToDebug 自動載入；修改後在 GUI 按「重新載入設定檔」即可生效。
+# 欄位說明請見 profiles/_TEMPLATE.yaml.example。
+# ============================================================
+profile:
+  key: FY26
+  display_name: FY26 (Panther Lake)
+  description: HP FY26 code，已驗證版本 v00.02.00
+  priority: 26
+  detect:
+    any:
+      - dir: .gitman/Intel/PantherLakeBoardPkg
+  pcd_scan_roots:
+    - HpPlatformPkg/MultiProject
+
+modifications:
+- sub_path: .gitman/Edk2/MdePkg/Library/BaseLib/CpuDeadLoop.c
+  old_code: |2
+
+    {
+      volatile UINTN  Index;
+
+      for (Index = mDeadLoopComparator; Index == mDeadLoopComparator;) {
+        CpuPause ();
+      }
+    }
+  new_code: |2
+
+    {
+      // volatile UINTN  Index;
+
+      // for (Index = mDeadLoopComparator; Index == mDeadLoopComparator;) {
+      //   CpuPause ();
+      // }
+    }
+- sub_path: .gitman/HpCoreMirror/Edk2/MdePkg/Library/BaseLib/CpuDeadLoop.c
+  old_code: |2
+
+    {
+      volatile UINTN  Index;
+
+      for (Index = mDeadLoopComparator; Index == mDeadLoopComparator;) {
+        CpuPause ();
+      }
+    }
+  new_code: |2
+
+    {
+      // volatile UINTN  Index;
+
+      // for (Index = mDeadLoopComparator; Index == mDeadLoopComparator;) {
+      //   CpuPause ();
+      // }
+    }
+- sub_path: .gitman/HpCoreMirror/HpTools/fixup.py
+  old_code: |2
+
+        if targets_with_local_modifications:
+            print("Stashing modified files before applying fixups")
+            print("(Use `git stash pop` to restore the modified files)")
+            repos = set(GetRepoRoot(file) for file in targets_with_local_modifications)
+            for repo in repos:
+                subprocess.run(["git", "stash", "push", "-m", "Auto stash by fixup.py"], cwd=repo, check=True)
+  new_code: |2
+
+        # if targets_with_local_modifications:
+        #     print("Stashing modified files before applying fixups")
+        #     print("(Use `git stash pop` to restore the modified files)")
+        #     repos = set(GetRepoRoot(file) for file in targets_with_local_modifications)
+        #     for repo in repos:
+        #         subprocess.run(["git", "stash", "push", "-m", "Auto stash by fixup.py"], cwd=repo, check=True)
+- sub_path: .gitman/HpCoreMirror/HpTools/fixup.py
+  old_code: |2
+
+        if targets_with_local_modifications:
+            print("Stashing modified files before applying fixups")
+            print("(Use `git stash pop` to restore the modified files)")
+            repos = set(get_repo_root(file) for file in targets_with_local_modifications)
+            for repo in repos:
+                subprocess.run(
+                    ["git", "stash", "push", "-m", "Auto stash by fixup.py"],
+                    cwd=repo,
+                    check=True,
+                )
+  new_code: |2
+
+        # if targets_with_local_modifications:
+        #     print("Stashing modified files before applying fixups")
+        #     print("(Use `git stash pop` to restore the modified files)")
+        #     repos = set(get_repo_root(file) for file in targets_with_local_modifications)
+        #     for repo in repos:
+        #         subprocess.run(
+        #             ["git", "stash", "push", "-m", "Auto stash by fixup.py"],
+        #             cwd=repo,
+        #             check=True,
+        #         )
+- sub_path: .gitman/Intel/ClientOneSiliconPkg/IpBlock/P2sb/LibraryPrivate/PeiDxeSmmP2SbSidebandAccessLib/PeiDxeSmmP2SbSidebandAccessLib.c
+  old_code: |2
+
+      if (PciSegmentRead16 (P2sbBase + PCI_VENDOR_ID_OFFSET) == 0xFFFF) {
+        ASSERT (FALSE);
+        return EFI_DEVICE_ERROR;
+  new_code: |2
+
+      if (PciSegmentRead16 (P2sbBase + PCI_VENDOR_ID_OFFSET) == 0xFFFF) {
+        // ASSERT (FALSE);
+        return EFI_DEVICE_ERROR;
+- sub_path: HpPlatformPkg/BuildOptions.dsc
+  old_code: |2
+
+    !if $(DEBUG_BIOS_ENABLE) == TRUE
+       DEFINE DEBUG_BUILD_OPTIONS = /DEFI_DEBUG /DDEBUG_MODE=1
+    !endif
+  new_code: |2
+
+    #!if $(DEBUG_BIOS_ENABLE) == TRUE
+       DEFINE DEBUG_BUILD_OPTIONS = /D EFI_DEBUG /D DEBUG_MODE=1 /DEDKII_GLUE_DebugPrintErrorLevel=(EFI_D_LOAD+EFI_D_ERROR+EFI_D_INFO+EFI_D_WARN+EFI_D_EVENT)
+    #!endif
+- sub_path: HpPlatformPkg/BuildOptions.dsc
+  old_code: |2
+
+      # defined, then debug and assert related macros wrapped by it are the NULL implementations.
+      DEFINE DEBUG_BUILD_OPTIONS = -DMDEPKG_NDEBUG -DNDEBUG
+    !else
+  new_code: |2
+
+      # defined, then debug and assert related macros wrapped by it are the NULL implementations.
+      DEFINE DEBUG_BUILD_OPTIONS =
+    !else
+- sub_path: HpPlatformPkg/HpPlatformPkg.dsc
+  old_code: |2
+
+    !if (($(TARGET) == DEBUG) OR (gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable == TRUE) AND (gPlatformModuleTokenSpaceGuid.PcdSerialPortEnable == FALSE))
+      #
+      # HP Customized SerialPortLib due to RTSCallbackHandlePei->DebugPostCode() output POST thru SerialPortWrite () directly, only works for Serial COM port but Serial UART port.
+      # And regular BaseDebugLibSerialPort will route debug message to legacy COM port 3F8/2F8 (which is only available for DT and CRB).
+      # In order to route debug message to serial IO UART port (via MMIO), use HP implemented PchSerialIoUartPortLib for route debug message to serial IO UART (via MMIO)
+      # 'for NB platform'
+      #
+      SerialPortLib|$(HP_PLATFORM_PACKAGE)/Library/PchSerialIoUartPortLib/PchSerialIoUartPortLib.inf
+    !endif
+      LzmaDecompressLib|MdeModulePkg/Library/LzmaCustomDecompressLib/LzmaCustomDecompressLib.inf
+  new_code: |2
+
+    !if (($(TARGET) == DEBUG) OR (gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable == TRUE) AND (gPlatformModuleTokenSpaceGuid.PcdSerialPortEnable == FALSE))
+      #
+      # HP Customized SerialPortLib due to RTSCallbackHandlePei->DebugPostCode() output POST thru SerialPortWrite () directly, only works for Serial COM port but Serial UART port.
+      # And regular BaseDebugLibSerialPort will route debug message to legacy COM port 3F8/2F8 (which is only available for DT and CRB).
+      # In order to route debug message to serial IO UART port (via MMIO), use HP implemented PchSerialIoUartPortLib for route debug message to serial IO UART (via MMIO)
+      # 'for NB platform'
+      #
+      # SerialPortLib|$(HP_PLATFORM_PACKAGE)/Library/PchSerialIoUartPortLib/PchSerialIoUartPortLib.inf
+    !endif
+      LzmaDecompressLib|MdeModulePkg/Library/LzmaCustomDecompressLib/LzmaCustomDecompressLib.inf
+- sub_path: HpPlatformPkg/HpPlatformPkg.dsc
+  old_code: |2
+
+    !if (($(TARGET) == DEBUG) OR (gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable == TRUE) AND (gPlatformModuleTokenSpaceGuid.PcdSerialPortEnable == FALSE))
+      #
+      # HP Customized SerialPortLib due to RTSCallbackHandlePei->DebugPostCode() output POST thru SerialPortWrite () directly, only works for Serial COM port but Serial UART port.
+      # And regular BaseDebugLibSerialPort will route debug message to legacy COM port 3F8/2F8 (which is only available for DT and CRB).
+      # In order to route debug message to serial IO UART port (via MMIO), use HP implemented PchSerialIoUartPortLib for route debug message to serial IO UART (via MMIO)
+      # 'for NB platform'
+      #
+      SerialPortLib|$(HP_PLATFORM_PACKAGE)/Library/PchSerialIoUartPortLib/PchSerialIoUartPortLib.inf
+    !endif
+      HpPlatformServicesLib|$(HP_PLATFORM_PACKAGE)/Library/HpPlatformServicesLib/HpPlatformServicesLib.inf
+  new_code: |2
+
+    !if (($(TARGET) == DEBUG) OR (gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable == TRUE) AND (gPlatformModuleTokenSpaceGuid.PcdSerialPortEnable == FALSE))
+      #
+      # HP Customized SerialPortLib due to RTSCallbackHandlePei->DebugPostCode() output POST thru SerialPortWrite () directly, only works for Serial COM port but Serial UART port.
+      # And regular BaseDebugLibSerialPort will route debug message to legacy COM port 3F8/2F8 (which is only available for DT and CRB).
+      # In order to route debug message to serial IO UART port (via MMIO), use HP implemented PchSerialIoUartPortLib for route debug message to serial IO UART (via MMIO)
+      # 'for NB platform'
+      #
+      # SerialPortLib|$(HP_PLATFORM_PACKAGE)/Library/PchSerialIoUartPortLib/PchSerialIoUartPortLib.inf
+    !endif
+      HpPlatformServicesLib|$(HP_PLATFORM_PACKAGE)/Library/HpPlatformServicesLib/HpPlatformServicesLib.inf
+- sub_path: HpPlatformPkg/HpPlatformPkg.dsc
+  old_code: |2
+
+    !if (($(TARGET) == DEBUG) OR (gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable == TRUE) AND (gPlatformModuleTokenSpaceGuid.PcdSerialPortEnable == FALSE))
+      #
+      # HP Customized SerialPortLib due to RTSCallbackHandlePei->DebugPostCode() output POST thru SerialPortWrite () directly, only works for Serial COM port but Serial UART port.
+      # And regular BaseDebugLibSerialPort will route debug message to legacy COM port 3F8/2F8 (which is only available for DT and CRB).
+      # In order to route debug message to serial IO UART port (via MMIO), use HP implemented PchSerialIoUartPortLib for route debug message to serial IO UART (via MMIO)
+      # 'for NB platform'
+      #
+      SerialPortLib|$(HP_PLATFORM_PACKAGE)/Library/PchSerialIoUartPortLib/PchSerialIoUartPortLib.inf
+    !endif
+
+    [LibraryClasses.X64.SMM_CORE]
+  new_code: |2
+
+    !if (($(TARGET) == DEBUG) OR (gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable == TRUE) AND (gPlatformModuleTokenSpaceGuid.PcdSerialPortEnable == FALSE))
+      #
+      # HP Customized SerialPortLib due to RTSCallbackHandlePei->DebugPostCode() output POST thru SerialPortWrite () directly, only works for Serial COM port but Serial UART port.
+      # And regular BaseDebugLibSerialPort will route debug message to legacy COM port 3F8/2F8 (which is only available for DT and CRB).
+      # In order to route debug message to serial IO UART port (via MMIO), use HP implemented PchSerialIoUartPortLib for route debug message to serial IO UART (via MMIO)
+      # 'for NB platform'
+      #
+      # SerialPortLib|$(HP_PLATFORM_PACKAGE)/Library/PchSerialIoUartPortLib/PchSerialIoUartPortLib.inf
+    !endif
+
+    [LibraryClasses.X64.SMM_CORE]
+- sub_path: HpPlatformPkg/HpPlatformPkg.dsc
+  old_code: |2
+
+      !if gPlatformModuleTokenSpaceGuid.PcdSerialPortEnable == TRUE
+        SerialPortLib|$(PLATFORM_FULL_PACKAGE)/Library/BaseSerialPortLib/BaseSerialPortLib.inf
+      !else
+        #
+        # HP Customized SerialPortLib due to RTSCallbackHandlePei->DebugPostCode() output POST thru SerialPortWrite () directly, only works for Serial COM port but Serial UART port.
+        # And regular BaseDebugLibSerialPort will route debug message to legacy COM port 3F8/2F8 (which is only available for DT and CRB).
+        # In order to route debug message to serial IO UART port (via MMIO), use HP implemented PchSerialIoUartPortLib for route debug message to serial IO UART (via MMIO)
+        # 'for NB platform'
+        #
+        SerialPortLib|$(HP_PLATFORM_PACKAGE)/Library/PchSerialIoUartPortLib/PchSerialIoUartPortLib.inf
+      !endif
+  new_code: |2
+
+      !if gPlatformModuleTokenSpaceGuid.PcdSerialPortEnable == TRUE
+        SerialPortLib|$(PLATFORM_FULL_PACKAGE)/Library/BaseSerialPortLib/BaseSerialPortLib.inf
+      !else
+        #
+        # HP Customized SerialPortLib due to RTSCallbackHandlePei->DebugPostCode() output POST thru SerialPortWrite () directly, only works for Serial COM port but Serial UART port.
+        # And regular BaseDebugLibSerialPort will route debug message to legacy COM port 3F8/2F8 (which is only available for DT and CRB).
+        # In order to route debug message to serial IO UART port (via MMIO), use HP implemented PchSerialIoUartPortLib for route debug message to serial IO UART (via MMIO)
+        # 'for NB platform'
+        #
+        # SerialPortLib|$(HP_PLATFORM_PACKAGE)/Library/PchSerialIoUartPortLib/PchSerialIoUartPortLib.inf
+      !endif
+- sub_path: HpPlatformPkg/HpPlatformPkg.dsc
+  old_code: |2
+
+    [PcdsFixedAtBuild.common]
+       # PCDs for Touch panel
+       ##  1: USB
+       ##  2: I2C
+       !if $(HP_TOUCH_PANEL_INTERFACE) == USB
+  new_code: |2
+
+    [PcdsFixedAtBuild.common]
+       # PCDs for Touch panel
+       ##  1: USB
+       ##  2: I2C
+       gEfiMdePkgTokenSpaceGuid.PcdDebugPropertyMask|0x0F
+       !if $(HP_TOUCH_PANEL_INTERFACE) == USB
+- sub_path: HpPlatformPkg/18M_FlashMap.fdf
+  old_code: |2
+
+      !if $(MULTIPLE_FIRMWARE_VOLUME_SUPPORT) == TRUE
+       DEFINE FLASH_REGION_FVMAIN_SIZE                                = 0x00520000  # 0x00000000
+       DEFINE FLASH_REGION_HP_CORE_ADDON_SIZE                         = 0x00280000  # 0x00520000
+       DEFINE FLASH_REGION_HP_FEATURES_ADDON_SIZE                     = 0x00180000  # 0x007A0000
+  new_code: |2
+
+      !if $(MULTIPLE_FIRMWARE_VOLUME_SUPPORT) == TRUE
+       DEFINE FLASH_REGION_FVMAIN_SIZE                                = 0x005C0000  # 0x00000000
+       DEFINE FLASH_REGION_HP_CORE_ADDON_SIZE                         = 0x00280000  # 0x00520000
+       DEFINE FLASH_REGION_HP_FEATURES_ADDON_SIZE                     = 0x000E0000  # 0x007A0000
+# ------------------------------------------------------------
+# option_debug_flag 說明
+# ------------------------------------------------------------
+# 用途：區分「必要修改」與「可選的大量除錯輸出」兩種層級，避免日常開發被過量訊息干擾。
+#
+# 套用規則（由工具 GUI 的「啟用所有 Debug Flag」控制）：
+# - option_debug_flag: false
+#     → 視為「必要變更」。不論是否勾選「啟用所有 Debug Flag」，都會套用。
+#     → 典型用途：PostCode 走序列埠、提升 ErrorLevel 等基本 Debug 能力。
+#
+# - option_debug_flag: true
+#     → 視為「選配型除錯變更」。只有在勾選「啟用所有 Debug Flag」時才會套用。
+#     → 典型用途：一次打開大量子系統的 DEBUG 訊息、ACPI 詳細偵錯、影響範圍大的設定。
+#
+# 建議使用準則：
+# - 設為 false：問題定位必備、風險小、輸出量可控、常駐也不影響效能。
+# - 設為 true ：會顯著增加 log 量、可能影響時序或效能、只在深入偵錯/重現低機率問題時使用。
+# ------------------------------------------------------------
+platform_pcd_modifications:
+- option_debug_flag: false
+  file_name: PlatformPcdConfig.dsc
+  old_code: |2
+
+        #DEFINE PROJECT_DEBUG_LEVEL = 0x80080046  # DEBUG_ERROR | DEBUG_EVENT | DEBUG_WARN | DEBUG_LOAD
+       DEFINE PROJECT_DEBUG_LEVEL = 0x80080006  # DEBUG_ERROR | DEBUG_EVENT | DEBUG_WARN | DEBUG_LOAD
+  new_code: |2
+
+        #DEFINE PROJECT_DEBUG_LEVEL = 0x80080046  # DEBUG_ERROR | DEBUG_EVENT | DEBUG_WARN | DEBUG_LOAD
+       DEFINE PROJECT_DEBUG_LEVEL = 0x80080046  # DEBUG_ERROR | DEBUG_EVENT | DEBUG_WARN | DEBUG_LOAD
+- option_debug_flag: false
+  file_name: PlatformPcdConfig.dsc
+  old_code: |2
+
+       ## PCD to enable HP PostCode Debug by serial port
+       gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable|FALSE
+  new_code: |2
+
+       ## PCD to enable HP PostCode Debug by serial port
+       gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable|FALSE
+- option_debug_flag: false
+  file_name: PlatformPcdConfig.dsc
+  old_code: |2
+
+       # PCD to enable Serial Debug in ACPI
+    !if $(HP_RTD3_ACPI_MEM_DEBUG_ENABLE) == TRUE
+       gHpIntelChipsetPkgTokenSpaceGuid.PcdSerialDebugInAcpiEnable|TRUE
+    !else
+       gHpIntelChipsetPkgTokenSpaceGuid.PcdSerialDebugInAcpiEnable|FALSE
+    !endif
+  new_code: |2
+
+       # PCD to enable Serial Debug in ACPI
+    !if $(HP_RTD3_ACPI_MEM_DEBUG_ENABLE) == TRUE
+       gHpIntelChipsetPkgTokenSpaceGuid.PcdSerialDebugInAcpiEnable|TRUE
+    !else
+       gHpIntelChipsetPkgTokenSpaceGuid.PcdSerialDebugInAcpiEnable|TRUE
+    !endif
+- option_debug_flag: false
+  file_name: PlatformPcdConfig.dsc
+  old_code: |2
+
+    !if gPlatformModuleTokenSpaceGuid.PcdPostCodeStatusCodeEnable == TRUE
+       gPostCodeDebugFeaturePkgTokenSpaceGuid.PcdStatusCodeUsePostCode|TRUE
+    !else
+       gPostCodeDebugFeaturePkgTokenSpaceGuid.PcdStatusCodeUsePostCode|FALSE
+    !endif
+  new_code: |2
+
+    !if gPlatformModuleTokenSpaceGuid.PcdPostCodeStatusCodeEnable == TRUE
+       gPostCodeDebugFeaturePkgTokenSpaceGuid.PcdStatusCodeUsePostCode|TRUE
+    !else
+       gPostCodeDebugFeaturePkgTokenSpaceGuid.PcdStatusCodeUsePostCode|TRUE
+    !endif
+- option_debug_flag: true
+  file_name: PlatformPcdConfig.dsc
+  old_code: |2
+
+    !endif
+
+    [PcdsDynamicHii.common.DEFAULT.STANDARD]
+  new_code: |2
+
+    !endif
+    ################DEBUG FLAG##########################
+       DEFINE BOOT_OPTIONS_DEBUG_MSG = TRUE
+       DEFINE HP_FEATURE_MISC_DEBUG_MSG = TRUE
+       DEFINE HP_BOOT_PERFORMANCE_TABLE_DEBUG_MSG = TRUE
+       DEFINE HP_FEATURE_ERROR_HANDLING_DEBUG_MSG = TRUE
+       DEFINE HP_LID_SWITCHING_DEBUG_MSG = TRUE
+       DEFINE PORT_OPTIONS_DEBUG_MSG = TRUE
+       DEFINE POWER_MANAGEMENT_OPTIONS_DEBUG_MSG = TRUE
+       DEFINE POWER_CONTROL_DEBUG_MSG = TRUE
+       DEFINE HP_GFX_MISC_DEBUG_MSG = TRUE
+       DEFINE PREBOOT_DISPLAY_CLONE_MODE_DEBUG_MSG = TRUE
+       DEFINE ADDON_GFX_POLICY_DEBUG_MSG = TRUE
+       DEFINE SYSTEM_OPTIONS_DEBUG_MSG = TRUE
+       DEFINE NVIDIA_GRAPHICS_DEBUG_MSG = TRUE
+       DEFINE HP_FEATURE_PRIVATE_WMI_DEBUG_MSG = TRUE
+       DEFINE BUILTIN_DEVICE_OPTIONS_DEBUG_MSG = TRUE
+       DEFINE HP_RTD3_PLATFORM_DEBUG_MSG = TRUE
+       DEFINE HP_USB_PORTCFG_DBG_MSG = TRUE
+       DEFINE USB_DOCK_PREBOOT_DISPLAY_DEBUG_MSG = TRUE
+       DEFINE INTEL_HYBRID_GRAPHICS_DEBUG_MSG = TRUE
+       DEFINE HP_INSTANT_ON_LOGO_ENABLE_DEBUG_MSG = TRUE
+       DEFINE INSTANT_ON_LOGO_DEBUG_MSG = TRUE
+       DEFINE INSTANT_ON_LOGO_PVT_DEBUG_MSG = TRUE
+       DEFINE HP_DIAGNOSTIC_DEBUG_MSG = TRUE
+       DEFINE HP_HUMAN_INTERFACE_DEVICES_DEBUG_MSG = TRUE
+       DEFINE HP_USBC_FIRMWARE_FLASH_DEBUG_MSG = TRUE
+       DEFINE HP_AUDIO_DEBUG_MSG = TRUE
+       DEFINE HP_THERMAL_DEBUG_MSG = TRUE
+       DEFINE CONDEV_ENABLE_ALL_DBG_MSG = TRUE
+       DEFINE HP_PELORI_DEBUG_ACPI_ADBG = TRUE
+       DEFINE HP_BATTERY_DEBUG_MSG = TRUE
+    # DEFINE HP_RTD3_ACPI_MEM_DEBUG_ENABLE = TRUE
+    # DEFINE HP_GFX_ACPI_MEM_DEBUG_ENABLE = TRUE
+    ################DEBUG FLAG##########################
+    [PcdsDynamicHii.common.DEFAULT.STANDARD]
+- option_debug_flag: false
+  file_name: HpFeatureMiscConfig.dsc
+  old_code: |2
+
+       ## PCD to enable HP PostCode Debug by serial port
+       gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable|FALSE
+    !if $(FSP_DEBUG_IN_RELEASE_MODE) == TRUE
+       gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable|TRUE
+  new_code: |2
+
+       ## PCD to enable HP PostCode Debug by serial port
+       gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable|FALSE
+    !if $(FSP_DEBUG_IN_RELEASE_MODE) == TRUE
+       gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable|TRUE
+- option_debug_flag: true
+  file_name: HpConnectionDeviceConfig.dsc
+  old_code: |2
+
+       ## PCD to enable all of Connection Device debug message.
+       gEfiHpConDevPkgTokenSpaceGuid.PcdConDevEnableAllDebugMSG   |FALSE
+  new_code: |2
+
+       ## PCD to enable all of Connection Device debug message.
+       gEfiHpConDevPkgTokenSpaceGuid.PcdConDevEnableAllDebugMSG   |TRUE
+- option_debug_flag: false
+  file_name: 18M_FlashMap.fdf
+  old_code: |2
+
+    !if $(TARGET) == DEBUG                                                          # offset
+      !if $(MULTIPLE_FIRMWARE_VOLUME_SUPPORT) == TRUE
+       DEFINE FLASH_REGION_FVMAIN_SIZE                                = 0x00620000  # 0x00000000
+       DEFINE FLASH_REGION_HP_CORE_ADDON_SIZE                         = 0x00280000  # 0x00620000
+       DEFINE FLASH_REGION_HP_FEATURES_ADDON_SIZE                     = 0x00180000  # 0x008A0000
+     !else
+       DEFINE FLASH_REGION_FVMAIN_SIZE                                = 0x00A20000  # 0x00000000
+  new_code: |2
+
+    !if $(TARGET) == DEBUG                                                          # offset
+      !if $(MULTIPLE_FIRMWARE_VOLUME_SUPPORT) == TRUE
+       DEFINE FLASH_REGION_FVMAIN_SIZE                                = 0x00620000  # 0x00000000
+       DEFINE FLASH_REGION_HP_CORE_ADDON_SIZE                         = 0x00280000  # 0x00620000
+       DEFINE FLASH_REGION_HP_FEATURES_ADDON_SIZE                     = 0x00180000  # 0x008A0000
+     !else
+       DEFINE FLASH_REGION_FVMAIN_SIZE                                = 0x009E0000  # 0x00000000
+- option_debug_flag: false
+  file_name: 18M_FlashMap.fdf
+  old_code: |2
+
+       # With FSP-O
+       # Main PEI
+       DEFINE FLASH_REGION_FV_RECOVERY_SIZE                           = 0x00270000  # 0x00F60000
+  new_code: |2
+
+       # With FSP-O
+       # Main PEI
+       DEFINE FLASH_REGION_FV_RECOVERY_SIZE                           = 0x002B0000  # 0x00F60000

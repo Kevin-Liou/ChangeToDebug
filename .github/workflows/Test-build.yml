@@ -25,8 +25,9 @@ jobs:
       - name: Build with PyInstaller for windows
         run: |
           pyinstaller `
-            --onefile -w ChangeToDebug_Start.py `
-            --python-option u `
+            --onefile -w `
+            --add-data "profiles;profiles" `
+            ChangeToDebug_Start.py
 
       - name: Set VERSION variable for windows
         run: |
