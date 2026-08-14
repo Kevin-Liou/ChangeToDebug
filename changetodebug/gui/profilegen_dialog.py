@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import (QApplication, QCheckBox, QDialog, QFileDialog,
                              QWidget)
 
 from ..appinfo import APP_NAME, user_profile_dir
+from ..core.basesnap import write_package
 from ..core.logbus import Logger
 from ..core.profilegen import GenOptions, generate, roundtrip_check, suggest_options
 
@@ -25,6 +26,8 @@ class ProfileGenDialog(QDialog):
             self.setStyleSheet(stylesheet)
 
         self.result_text = ""
+        self._base_files = {}
+        self._base_entries = []
         self._build_ui()
 
     # ---------------------------------------------------------------- UI
@@ -172,6 +175,14 @@ class ProfileGenDialog(QDialog):
         self.roundtrip_box.setChecked(True)
         self.roundtrip_box.setToolTip("複製一份 ORG 套用產生的 profile，再與 MOD 比對（忽略註解與空行）")
         row.addWidget(self.roundtrip_box)
+
+        self.package_box = QCheckBox("輸出成目錄（含 base 快照）")
+        self.package_box.setChecked(True)
+        self.package_box.setToolTip(
+            "存成 profiles\\<世代>\\ 目錄，並把 ORG 的原始檔一併複製成 base 快照。\n"
+            "有 base 才能在日後 codebase 更新、規則比對失敗時做 3-way merge。\n"
+            "取消勾選則沿用舊的單一 YAML 格式。")
+        row.addWidget(self.package_box)
         row.addStretch(1)
 
         holder = QWidget()
@@ -253,6 +264,8 @@ class ProfileGenDialog(QDialog):
             out.append(f"指定路徑規則　　{stats.get('sub_rules', 0)} 條")
             out.append(f"PCD 掃描規則　　{stats.get('pcd_rules', 0)} 條")
             out.append(f"無變化的檔案　　{stats.get('unchanged', 0)} 個")
+            out.append(f"base 快照　　　　{len(result.base_files)} 個原始檔"
+                       f"（來自 ORG，供日後 3-way merge 使用）")
 
         if report is not None:
             out.append("")
@@ -283,11 +296,17 @@ class ProfileGenDialog(QDialog):
         self.yaml_view.setPlainText(result.yaml_text)
         self._set_saveable(result.ok)
         self.result_text = result.yaml_text
+        self._base_files = dict(result.base_files)
+        self._base_entries = list(result.base_entries)
 
     # ---------------------------------------------------------------- 儲存
 
     def _current_yaml(self):
         return self.yaml_view.toPlainText()
+
+    def _as_package(self):
+        """是否輸出成目錄。沒有 base 檔可存時退回單檔，避免產生空殼目錄。"""
+        return self.package_box.isChecked() and bool(self._base_files)
 
     def _write(self, path):
         try:
@@ -298,8 +317,33 @@ class ProfileGenDialog(QDialog):
             QMessageBox.warning(self, APP_NAME, f"儲存失敗：{exc}")
             return False
 
+    def _write_package(self, package_dir):
+        try:
+            copied = write_package(package_dir, self._current_yaml(),
+                                   self._base_files, self._base_entries)
+        except Exception as exc:
+            QMessageBox.warning(self, APP_NAME, f"儲存失敗：{exc}")
+            return False
+        QMessageBox.information(
+            self, APP_NAME,
+            f"已儲存：\n{package_dir}\n\n"
+            f"profile.yaml、base_manifest.yaml，以及 base\\ 底下 {copied} 個原始檔。")
+        return True
+
     def _save_to_profiles(self):
         key = self.key_edit.text().strip() or "NEW"
+        if self._as_package():
+            target = user_profile_dir() / key
+            if target.exists():
+                confirm = QMessageBox.question(
+                    self, APP_NAME, f"{target.name}\\ 已存在，要覆蓋嗎？",
+                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                if confirm != QMessageBox.Yes:
+                    return
+            if self._write_package(target):
+                self.accept()
+            return
+
         target = user_profile_dir() / f"{key}.yaml"
         if target.exists():
             confirm = QMessageBox.question(
@@ -313,6 +357,13 @@ class ProfileGenDialog(QDialog):
 
     def _save_as(self):
         key = self.key_edit.text().strip() or "NEW"
+        if self._as_package():
+            folder = QFileDialog.getExistingDirectory(
+                self, "選擇要放置 profile 目錄的位置", str(user_profile_dir()))
+            if folder:
+                self._write_package(Path(folder) / key)
+            return
+
         path, _ = QFileDialog.getSaveFileName(
             self, "另存 profile", str(user_profile_dir() / f"{key}.yaml"),
             "YAML (*.yaml);;所有檔案 (*.*)")

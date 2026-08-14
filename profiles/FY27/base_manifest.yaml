@@ -1,0 +1,189 @@
+version: 1
+base_commit: 8ceb75e2
+entries:
+- rule_id: new:0
+  label: HpPlatformPkg/Include/Library/HpForceDebugLib.h
+  sub_path: HpPlatformPkg/Include/Library/HpForceDebugLib.h
+  base_file: ''
+  reason: 新增檔案，不需要 base
+- rule_id: new:1
+  label: HpPlatformPkg/Library/HpForceDebugLib/HpForceDebugLib.c
+  sub_path: HpPlatformPkg/Library/HpForceDebugLib/HpForceDebugLib.c
+  base_file: ''
+  reason: 新增檔案，不需要 base
+- rule_id: new:2
+  label: HpPlatformPkg/Library/HpForceDebugLib/HpForceDebugLib.inf
+  sub_path: HpPlatformPkg/Library/HpForceDebugLib/HpForceDebugLib.inf
+  base_file: ''
+  reason: 新增檔案，不需要 base
+- rule_id: new:3
+  label: HpPlatformPkg/Library/HpForceDebugLib/README.md
+  sub_path: HpPlatformPkg/Library/HpForceDebugLib/README.md
+  base_file: ''
+  reason: 新增檔案，不需要 base
+- rule_id: new:4
+  label: HpPlatformPkg/AcpiTables/Dt/Dsdt/PlatformHooks.asl
+  sub_path: HpPlatformPkg/AcpiTables/Dt/Dsdt/PlatformHooks.asl
+  base_file: ''
+  reason: 新增檔案，不需要 base
+- rule_id: new:5
+  label: HpPlatformPkg/AcpiTables/Dt/Dsdt/PchUart0Debugger.ASL
+  sub_path: HpPlatformPkg/AcpiTables/Dt/Dsdt/PchUart0Debugger.ASL
+  base_file: ''
+  reason: 新增檔案，不需要 base
+- rule_id: mod:0
+  label: 宣告 HpForceDebugLib library class
+  sub_path: HpPlatformPkg/HpPlatformPkg.dec
+  base_file: HpPlatformPkg/HpPlatformPkg.dec
+  source: extracted
+  sha256: 5c61100008d6d5449abbd8629ef41d8f7fd1dbd4220bb3460b9e32e2269feac8
+- rule_id: mod:1
+  label: HpForceDebugLib 對應到 INF
+  sub_path: HpPlatformPkg/HpPlatformPkg.dsc
+  base_file: HpPlatformPkg/HpPlatformPkg.dsc
+  source: extracted
+  sha256: 206ea7a60c4138168dae96b791fa9461fcfb4d6c74b5c666fa6031c1002a300a
+- rule_id: mod:2
+  label: 補 External 宣告（修 build error 6084）
+  sub_path: HpPlatformPkg/AcpiTables/Dt/PlatformSsdt/PlatformSsdt.asl
+  base_file: HpPlatformPkg/AcpiTables/Dt/PlatformSsdt/PlatformSsdt.asl
+  source: extracted
+  sha256: a9aee86c5086153183101eb8be77234de4653389df8d4b7ab81ae16d7a941aa9
+- rule_id: mod:3
+  label: '[範例/SMM] inf 加入 HpForceDebugLib'
+  sub_path: HpPlatformPkg/HpPlatformServices/Smm/HpPlatformSmmServices.inf
+  base_file: HpPlatformPkg/HpPlatformServices/Smm/HpPlatformSmmServices.inf
+  source: extracted
+  sha256: e59a636d5c6b957c338d5fce2a465e52ef068507f67b1403896b1852124cf2bc
+- rule_id: mod:4
+  label: '[範例/SMM] 加入 HpForceDebugLib.h'
+  sub_path: HpPlatformPkg/HpPlatformServices/Smm/HpPlatformSmmServices.c
+  base_file: HpPlatformPkg/HpPlatformServices/Smm/HpPlatformSmmServices.c
+  source: extracted
+  sha256: 79cb30924a50c6522a0c13d2786d1d577be4f37635a45d9f5c9a8fee8ce76ead
+- rule_id: mod:5
+  label: '[範例/SMM] 加入自我測試訊息'
+  sub_path: HpPlatformPkg/HpPlatformServices/Smm/HpPlatformSmmServices.c
+  base_file: HpPlatformPkg/HpPlatformServices/Smm/HpPlatformSmmServices.c
+  source: extracted
+  sha256: 79cb30924a50c6522a0c13d2786d1d577be4f37635a45d9f5c9a8fee8ce76ead
+- rule_id: pcd:0
+  label: 新增 HP_DEBUG_LOG_BIOS / HP_DEBUG_LOG_ACPI 兩個開關
+  file_name: Z*PkgConfig.dsc
+  base_file: HpPlatformPkg/MultiProject/Z21ManaanPkg/Z21ManaanPkgConfig.dsc
+  source: extracted
+  sha256: 27eeffe84f43d814e11a0c1f1c713ebeca65e415f0e85a34256cdf719475fbb6
+  covers:
+  - HpPlatformPkg/MultiProject/Z21ManaanPkg/Z21ManaanPkgConfig.dsc
+  - HpPlatformPkg/MultiProject/Z22MekrosPkg/Z22MekrosPkgConfig.dsc
+  representative: Z21ManaanPkg
+- rule_id: pcd:1
+  label: HP_DEBUG_LOG_BIOS -> DEBUG_BIOS_ENABLE
+  file_name: PlatformPkgConfig.dsc
+  base_file: HpPlatformPkg/MultiProject/Z21ManaanPkg/Config/PlatformPkgConfig.dsc
+  source: extracted
+  sha256: 859bbfdefc7dcdbf742144321bbabbedaba29f2174165cddee748e4d80d8782b
+  covers:
+  - HpPlatformPkg/MultiProject/Z21ManaanPkg/Config/PlatformPkgConfig.dsc
+  - HpPlatformPkg/MultiProject/Z22MekrosPkg/Config/PlatformPkgConfig.dsc
+  representative: Z21ManaanPkg
+- rule_id: pcd:2
+  label: PROJECT_DEBUG_LEVEL 改為只輸出 opt-in 檔案
+  file_name: PlatformPcdConfig.dsc
+  base_file: HpPlatformPkg/MultiProject/Z21ManaanPkg/Config/PlatformPcdConfig.dsc
+  source: extracted
+  sha256: 7c7648ebf0ecb8198e6b4befbb5fdc9b95a3ab01d7335377fa19d33cc7984da8
+  covers:
+  - HpPlatformPkg/MultiProject/Z21ManaanPkg/Config/PlatformPcdConfig.dsc
+  - HpPlatformPkg/MultiProject/Z22MekrosPkg/Config/PlatformPcdConfig.dsc
+  representative: Z21ManaanPkg
+- rule_id: pcd:3
+  label: HP_DEBUG_LOG_ACPI -> PcdSerialDebugInAcpiEnable
+  file_name: PlatformPcdConfig.dsc
+  base_file: HpPlatformPkg/MultiProject/Z21ManaanPkg/Config/PlatformPcdConfig.dsc
+  source: extracted
+  sha256: 7c7648ebf0ecb8198e6b4befbb5fdc9b95a3ab01d7335377fa19d33cc7984da8
+  covers:
+  - HpPlatformPkg/MultiProject/Z21ManaanPkg/Config/PlatformPcdConfig.dsc
+  - HpPlatformPkg/MultiProject/Z22MekrosPkg/Config/PlatformPcdConfig.dsc
+  representative: Z21ManaanPkg
+- rule_id: pcd:4
+  label: 強制開啟 PcdStatusCodeUseSerialPortPlatform
+  file_name: PlatformPcdConfig.dsc
+  base_file: HpPlatformPkg/MultiProject/Z21ManaanPkg/Config/PlatformPcdConfig.dsc
+  source: extracted
+  sha256: 7c7648ebf0ecb8198e6b4befbb5fdc9b95a3ab01d7335377fa19d33cc7984da8
+  covers:
+  - HpPlatformPkg/MultiProject/Z21ManaanPkg/Config/PlatformPcdConfig.dsc
+  - HpPlatformPkg/MultiProject/Z22MekrosPkg/Config/PlatformPcdConfig.dsc
+  representative: Z21ManaanPkg
+- rule_id: pcd:5
+  label: 強制開啟 PcdHpPostCodeToSerialPortEnable（啟用 SIO UART）
+  file_name: HpFeatureMiscConfig.dsc
+  base_file: HpPlatformPkg/MultiProject/Z21ManaanPkg/Config/HpFeature/HpFeatureMiscConfig.dsc
+  source: extracted
+  sha256: 7fc4f0ec479b03de422aa2f2a1ab0c3d1ecaed577c83e1ef7319840b28ca4eaa
+  covers:
+  - HpPlatformPkg/MultiProject/Z21ManaanPkg/Config/HpFeature/HpFeatureMiscConfig.dsc
+  - HpPlatformPkg/MultiProject/Z22MekrosPkg/Config/HpFeature/HpFeatureMiscConfig.dsc
+  representative: Z21ManaanPkg
+- rule_id: pcd:6
+  label: '[範例/PEI] inf 加入 HpForceDebugLib'
+  file_name: PlatformPortingPei.inf
+  base_file: HpPlatformPkg/MultiProject/Z21ManaanPkg/PlatformPortingPei/PlatformPortingPei.inf
+  source: extracted
+  sha256: 0d06c17e859973eac7133651aa5b553eab21b55e91a65e35f8ee09c96f901366
+  covers:
+  - HpPlatformPkg/MultiProject/Z21ManaanPkg/PlatformPortingPei/PlatformPortingPei.inf
+  - HpPlatformPkg/MultiProject/Z22MekrosPkg/PlatformPortingPei/PlatformPortingPei.inf
+  representative: Z21ManaanPkg
+- rule_id: pcd:7
+  label: '[範例/PEI] 加入 HpForceDebugLib.h'
+  file_name: DriverEntry.c
+  base_file: HpPlatformPkg/MultiProject/Z21ManaanPkg/PlatformPortingPei/DriverEntry.c
+  source: extracted
+  sha256: 046fd08a8fe9454219559a8907286c7f1e80bec7323240be60e959d2256d0c69
+  covers:
+  - HpPlatformPkg/MultiProject/Z21ManaanPkg/PlatformPortingPei/DriverEntry.c
+  - HpPlatformPkg/MultiProject/Z22MekrosPkg/PlatformPortingPei/DriverEntry.c
+  representative: Z21ManaanPkg
+- rule_id: pcd:8
+  label: '[範例/PEI] 加入自我測試訊息'
+  file_name: DriverEntry.c
+  base_file: HpPlatformPkg/MultiProject/Z21ManaanPkg/PlatformPortingPei/DriverEntry.c
+  source: extracted
+  sha256: 046fd08a8fe9454219559a8907286c7f1e80bec7323240be60e959d2256d0c69
+  covers:
+  - HpPlatformPkg/MultiProject/Z21ManaanPkg/PlatformPortingPei/DriverEntry.c
+  - HpPlatformPkg/MultiProject/Z22MekrosPkg/PlatformPortingPei/DriverEntry.c
+  representative: Z21ManaanPkg
+- rule_id: pcd:9
+  label: '[範例/DXE] inf 加入 HpForceDebugLib'
+  file_name: PlatformBootOrderLib.inf
+  base_file: HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.inf
+  source: extracted
+  sha256: ea1df7ef24e7668976939ade71389d9fb37e1025e086aa7cb41fcfebbcd0056d
+  covers:
+  - HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.inf
+  - HpPlatformPkg/MultiProject/Z22MekrosPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.inf
+  representative: Z21ManaanPkg
+- rule_id: pcd:10
+  label: '[範例/DXE] 加入 HpForceDebugLib.h'
+  file_name: PlatformBootOrderLib.c
+  base_file: HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.c
+  source: extracted
+  sha256: ee4b3bbcb2927863d4e8631f63f8facb65316173d186be7696b567ba5b9936f4
+  covers:
+  - HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.c
+  - HpPlatformPkg/MultiProject/Z22MekrosPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.c
+  representative: Z21ManaanPkg
+- rule_id: pcd:11
+  label: '[範例/DXE] 加入自我測試訊息'
+  file_name: PlatformBootOrderLib.c
+  base_file: HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.c
+  source: extracted
+  sha256: ee4b3bbcb2927863d4e8631f63f8facb65316173d186be7696b567ba5b9936f4
+  covers:
+  - HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.c
+  - HpPlatformPkg/MultiProject/Z22MekrosPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.c
+  representative: Z21ManaanPkg

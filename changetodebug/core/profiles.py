@@ -10,6 +10,10 @@ YAML 結構（所有欄位皆可省略，省略時使用預設值）::
       display_name: FY27 (Wildcat Lake)
       description: 說明文字
       priority: 30                    # 數字小者先被比對
+      base_commit: 8ceb75e2           # 產生此 profile 時的 BIOS source 版本（選填）
+      base_commits:                   # 需要綁多個 repo 時用這個（gitman 子 repo 各自獨立）
+        '': 8ceb75e2                  #   空字串 = 專案根目錄
+        '.gitman/Edk2': 2800d52c
       detect:                         # 自動偵測條件
         any:                          # 任一命中即算符合
           - dir: .gitman/Intel/WildcatLakeBoardPkg
@@ -70,6 +74,8 @@ DEFAULT_DRIVER_DEBUG = {
         "pcd_file": "PlatformPcdConfig.dsc",
         "pcd_pattern": r"(PcdHpMemoryDebugEnable\s*\|\s*)FALSE",
         "pcd_replacement": r"\1TRUE",
+        # 已經是 TRUE 時代表套用過，沒有這條重跑會誤報「找不到片段」
+        "pcd_applied_check": r"PcdHpMemoryDebugEnable\s*\|\s*TRUE",
         "acpi_area_sub_path":
             "HpPe/HpCommonPkg/MemoryDebug/Dxe/DxeMemDebugAcpiArea/DxeMemDebugAcpiArea.c",
         "acpi_area_old": "IsLegacySupported()",
@@ -107,8 +113,26 @@ class Profile:
     pcd_rules: list = field(default_factory=list)   # file_name 型
     new_file_rules: list = field(default_factory=list)  # 新增檔案型
     new_files_dir: str = ""
+    base_commits: dict = field(default_factory=dict)    # {repo 子路徑: commit}，'' 代表專案根目錄
+    package_dir: str = ""                               # 目錄型 profile 的套件目錄（單檔型為空）
+    base_snapshot: object = None                        # BaseSnapshot；單檔型為 None
     source_path: str = ""
     load_error: str = ""
+
+    @property
+    def has_base(self):
+        """是否帶有 base 快照（階段 4 的 3-way merge 需要）。"""
+        return self.base_snapshot is not None and self.base_snapshot.available
+
+    def dead_rules(self):
+        """old_code 與 new_code 相同的規則——這種規則套用了也不會有任何改變。
+
+        通常是產生或手改時掉了 new_code 的內容。工具原本只在執行到那一條時
+        報一句「規則無變化」，混在幾十條訊息裡很容易被忽略。
+        """
+        return [r for r in self.all_rules
+                if not r.is_new_file and not r.regex
+                and r.old_code and r.old_code == r.new_code]
 
     @property
     def title(self):
@@ -142,6 +166,23 @@ class Profile:
         for cond in list(self.detect_any) + list(self.detect_all):
             parts.extend(str(v) for v in cond.values())
         return "、".join(parts) if parts else "（未定義偵測條件）"
+
+    # ---- 版本基準 ----
+    def check_drift(self, base_path):
+        """比較專案目前的版本與 profile 產生基準的差距。
+
+        沒有宣告 base_commit(s) 的 profile 回傳空 list，呼叫端就什麼都不顯示，
+        既有的 FY25 / FY26 因此完全不受影響。
+        """
+        from .gitinfo import drift
+
+        results = []
+        for repo, commit in self.base_commits.items():
+            target = Path(base_path) / repo if repo else Path(base_path)
+            info = drift(target, commit, repo_label=repo or "(專案根目錄)")
+            if info is not None:
+                results.append(info)
+        return results
 
 
 def _check_condition(base, cond):
@@ -185,6 +226,8 @@ def _build_rules(raw_list, source, key_prefix):
             old_code=item.get("old_code", "") or "",
             new_code=item.get("new_code", "") or "",
             regex=bool(item.get("regex", False)),
+            regex_applied_check=str(item.get("regex_applied_check", "") or ""),
+            expect_count=int(item.get("expect_count", 0) or 0),
             option_debug_flag=bool(item.get("option_debug_flag", False)),
             note=str(item.get("note", "") or ""),
             source=source,
@@ -200,6 +243,25 @@ def _resolve_new_files_dir(raw, profile_path):
     if not candidate.is_absolute():
         candidate = Path(profile_path).parent / candidate
     return str(candidate)
+
+
+def _build_base_commits(meta):
+    """接受 base_commit（單一）與 base_commits（多 repo）兩種寫法，合併成一個 dict。
+
+    key 為相對於專案根目錄的 repo 路徑，空字串代表專案根目錄本身。
+    """
+    commits = {}
+    single = meta.get("base_commit")
+    if single:
+        commits[""] = str(single).strip()
+    multi = meta.get("base_commits")
+    if isinstance(multi, dict):
+        for repo, commit in multi.items():
+            if not commit:
+                continue
+            key = str(repo).replace("\\", "/").strip("/")
+            commits[key] = str(commit).strip()
+    return commits
 
 
 def _build_new_file_rules(raw_list, base_dir):
@@ -231,10 +293,16 @@ def _build_new_file_rules(raw_list, base_dir):
     return rules
 
 
-def load_profile_file(path):
-    """讀取單一 profile YAML。解析失敗時回傳帶 load_error 的 Profile。"""
+def load_profile_file(path, package_dir=None):
+    """讀取單一 profile YAML。解析失敗時回傳帶 load_error 的 Profile。
+
+    package_dir 有值代表這是目錄型 profile（profiles\\FY28\\），會一併載入 base 快照。
+    """
     path = Path(path)
     key = _key_from_filename(path)
+    # 目錄型的設定檔叫 profile.yaml，檔名推不出世代代號，改用套件目錄名
+    if package_dir is not None and path.stem.lower() in ("profile", "modifications"):
+        key = Path(package_dir).name
 
     if yaml is None:
         return Profile(key=key, source_path=str(path),
@@ -277,35 +345,83 @@ def load_profile_file(path):
                                "platform_pcd_modifications", "pcd"),
         new_file_rules=_build_new_file_rules(data.get("new_files"), new_files_dir),
         new_files_dir=new_files_dir,
+        base_commits=_build_base_commits(meta),
         source_path=str(path),
     )
+    if package_dir is not None:
+        from .basesnap import load_snapshot
+        profile.package_dir = str(package_dir)
+        profile.base_snapshot = load_snapshot(package_dir)
+
     if not profile.all_rules:
         profile.load_error = "檔案中沒有任何 modifications / platform_pcd_modifications"
     return profile
 
 
-def load_profiles(search_dirs=None):
-    """掃描所有搜尋路徑載入 profile；同名 key 以先出現者為準。"""
+def _package_yaml(directory):
+    """目錄型 profile 的設定檔位置；不是 profile 套件就回 None。"""
+    for name in ("profile.yaml", "profile.yml",
+                 f"{directory.name}.yaml", f"{directory.name}.yml"):
+        candidate = directory / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _scan_dir(directory):
+    """列出一個搜尋路徑底下的 profile，回傳 [(yaml 路徑, 套件目錄 或 None), ...]。
+
+    目錄型與單檔型混在一起依名稱排序，因此 FY28\\ 會排在 FY28.yaml 之前——
+    同一個 key 兩種形態並存時，帶 base 快照的目錄型優先。
+    """
+    entries = []
+    try:
+        children = sorted(directory.iterdir(), key=lambda p: p.name.lower())
+    except OSError:
+        return entries
+
+    for path in children:
+        # 底線開頭視為範本 / 停用
+        if path.name.startswith("_"):
+            continue
+        if path.is_dir():
+            found = _package_yaml(path)
+            if found is not None:
+                entries.append((found, path))
+        elif path.suffix.lower() in (".yaml", ".yml"):
+            # 排除專案內其他用途的 yaml
+            if path.name.lower().startswith(("requirements", "settings")):
+                continue
+            entries.append((path, None))
+    return entries
+
+
+def load_profiles(search_dirs=None, collisions=None):
+    """掃描所有搜尋路徑載入 profile；同名 key 以先出現者為準。
+
+    collisions 傳入一個 list 時，會把被同名 key 遮蔽而未載入的檔案記進去，
+    讓 GUI 可以提醒——否則使用者放了一個 key 重複的 yaml，它會安靜地不生效。
+    """
     dirs = search_dirs if search_dirs is not None else profile_search_dirs()
     profiles = []
-    seen_keys = set()
+    seen_keys = {}
 
     for directory in dirs:
         directory = Path(directory)
         if not directory.is_dir():
             continue
-        for path in sorted(directory.glob("*.y*ml")):
-            # 底線開頭視為範本 / 停用；另外排除專案內其他用途的 yaml
-            if path.name.startswith("_") or path.name.lower().startswith(("requirements", "settings")):
-                continue
-            profile = load_profile_file(path)
+        for path, package_dir in _scan_dir(directory):
+            profile = load_profile_file(path, package_dir)
             upper = profile.key.upper()
             if upper in seen_keys:
+                if collisions is not None and (profile.all_rules or profile.detect_any):
+                    collisions.append({"key": profile.key, "ignored": str(path),
+                                       "used": seen_keys[upper]})
                 continue
             # 完全不是 profile 的 yaml（沒有規則也沒有 profile 區塊）就跳過
             if profile.load_error and not profile.all_rules and not profile.detect_any:
                 continue
-            seen_keys.add(upper)
+            seen_keys[upper] = str(path)
             profiles.append(profile)
 
     profiles.sort(key=lambda p: (p.priority, p.key))

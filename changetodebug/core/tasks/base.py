@@ -22,6 +22,8 @@ class RunContext:
     dry_run: bool = False
     backup: bool = True
     enable_all_debug_flags: bool = False
+    merge_fallback: bool = True      # 比對失敗時是否用 base 快照做 3-way merge
+    revert: bool = False             # True = 反向移除已套用的修改
     options: dict = field(default_factory=dict)      # 各 task 的專屬選項，key 為 task.key
     _cancel_check: object = None
     _progress_cb: object = None

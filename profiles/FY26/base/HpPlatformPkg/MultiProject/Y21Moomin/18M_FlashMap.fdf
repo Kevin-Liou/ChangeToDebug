@@ -1,0 +1,220 @@
+#
+# (c) Copyright 2024 - 2025 HP Development Company, L.P.
+# This software and associated documentation (if any) is furnished under a license and may only be used or
+# copied in accordance with the terms of the license. Except as permitted by such license, no part of this
+# software or documentation may be reproduced, stored in a retrieval system, or transmitted in any
+# form or by any means without the express written consent of HP Development Company.
+#
+# File Name: 18M_FlashMap.fdf
+#
+# Abstract: 18M BIOS REGION Flash map
+#
+
+# 18MB BIOS
+DEFINE FLASH_BASE       = 0xFEE00000
+DEFINE FLASH_SIZE       = 0x01200000
+DEFINE FLASH_BLOCK_SIZE = 0x1000
+DEFINE FLASH_NUM_BLOCKS = 0x1200
+
+# Below if condition string is use for PantherLakeBoardPkg\Tools\StripFlashmap.py parsing condition, don't change it!
+!if $(TARGET) == DEBUG                                                          # offset
+  !if $(MULTIPLE_FIRMWARE_VOLUME_SUPPORT) == TRUE
+   DEFINE FLASH_REGION_FVMAIN_SIZE                                = 0x00620000  # 0x00000000
+   DEFINE FLASH_REGION_HP_CORE_ADDON_SIZE                         = 0x00280000  # 0x00620000
+   DEFINE FLASH_REGION_HP_FEATURES_ADDON_SIZE                     = 0x00180000  # 0x008A0000
+ !else
+   DEFINE FLASH_REGION_FVMAIN_SIZE                                = 0x00A20000  # 0x00000000
+ !endif
+   DEFINE FLASH_REGION_RESERVED_SIZE                              = 0x00000000  # 0x00A20000
+   DEFINE FLASH_REGION_CUSTOMLOGO_SIZE                            = 0x00004000  # 0x00A20000
+   DEFINE FLASH_REGION_ELECTRONIC_LABEL_SIZE                      = 0x00001000  # 0x00A24000
+   DEFINE FLASH_REGION_SECURE_BOOT_LOG_SIZE                       = 0x00011000  # 0x00A25000
+   
+   DEFINE FLASH_REGION_NVSTORAGE_SIZE                             = 0x00060000  # 0x00A36000
+   DEFINE FLASH_REGION_NVSTORAGE_SUBREGION_NV_VARIABLE_STORE_SIZE = 0x0002E000  #    {0x00A36000}
+   DEFINE FLASH_REGION_NVSTORAGE_SUBREGION_NV_FTW_WORKING_SIZE    = 0x00002000  #    {0x00A64000}
+   DEFINE FLASH_REGION_NVSTORAGE_SUBREGION_NV_FTW_SPARE_SIZE      = 0x00030000  #    {0x00A66000}
+
+   # Region A Descriptor
+   DEFINE FLASH_REGION_A_HEADER_SIZE                              = 0x00004000  # 0x00A96000
+
+   # PEI Relocation Data
+   DEFINE FLASH_REGION_FV_RECOVERY_RELOC_DATA_SIZE                = 0x00000000  # 0x00A9A000
+   DEFINE FLASH_REGION_MICROCODE_SIZE                             = 0x000EB000  # 0x00A9A000
+
+   # For HP KBC
+   DEFINE FLASH_REGION_FV_HP_EC_SIZE                              = 0x00132000  # 0x00B85000
+   DEFINE FLASH_REGION_FV_HP_BASE_EC_SIZE                         = 0x00000000  #    {0x00B85000}
+   DEFINE FLASH_REGION_FV_HP_KBC_SIZE                             = 0x00132000  #    {0x00B85000}
+  
+   #
+   # *NOTE:BIOS Startup ACM Binary should be aligned on 4kB boundary and have 288kB within a 512-kB aligned chunk.
+   #       Use Intel RC FvFwBinaries FV region use HP BIOSAC region instead, BIOSAC region with FV header and padding bytes
+   #       to ensure BIOS Startup ACM can meet requirements:
+   #       1. 4k boundary alignment.
+   #       2. 288kb withing a 512-kb align chunk.
+   #       Thus BIOSAC region area S-ACM data cannot overlap with xx00000h and xx80000h
+   #       BIOS Region offset location must either: 
+   #       1. ACM resides in upper 0~512K chunk: (00X00000h - 4K = 00XFF000h) < BIOSAC offset < (00X38000h - 4K = 00X37000h) or
+   #       2. ACM resides in lower 512K~1024K chunk: (00X80000h - 4K = 00X7F000h) < BIOSAC offset < (00XB8000h - 4K = 00XB7000h)
+   #       *NOTE: 4K means the data with FV header data and FFS padding bytes for make ACM meet 4K alignment.
+   #
+   DEFINE FLASH_REGION_BIOSAC_SIZE                                = 0x00069000  # 0x00CB7000 to 0x00D20000 (MAKE SURE NO overlap/cross 512kb alignment chunks)
+
+   #
+   # the size of FSP regions reference: Intel\PantherLakeBoardPkg\Include\Fdf\FlashMapInclude.fdf
+   #
+   # (Unsupport FSP-O arch (PcdFspWrapperResetVectorInFsp = FALSE)
+   # +--------------------+
+   # |  Fsp_Rebased_S.fd  |
+   # +--------------------+
+   # |  Fsp_Rebased_M.fd  |
+   # +--------------------+
+   # |  Fsp_Rebased_T.fd  |
+   # +--------------------+
+   # |  FVRECOVERY        |
+   # +--------------------+
+   #
+   # (Support FSP-O/T arch (PcdFspWrapperResetVectorInFsp = TRUE)
+   # +--------------------+
+   # |  FvFspS            |
+   # +--------------------+
+   # |  Fsp_Rebased_M.fd  |
+   # +--------------------+
+   # |  FVRECOVERY        |
+   # +--------------------+--------------------+
+   # |  Padding reserved  |                    |
+   # +--------------------+  FspTop region     |
+   # |  Fsp_Rebased_T.fd  |  FspTopAt4G.fd     |
+   # +--------------------+ (HP FV_SEC region) |
+   # |  Fsp_Rebased_O.fd  |                    |
+   # +--------------------+--------------------+
+   #
+   DEFINE FLASH_REGION_FV_FSP_SUBREGION_FSP_S_SIZE                = 0x000A0000  #    {0x00D20000}
+   DEFINE FLASH_REGION_FV_FSP_SUBREGION_FSP_M_SIZE                = 0x001A0000  #    {0x00DC0000}
+!if gFspWrapperFeaturePkgTokenSpaceGuid.PcdFspWrapperResetVectorInFsp == FALSE  # !!IMPORTANT!! Must make sure PcdFspWrapperResetVectorInFsp PCD here in order to support RC BssGen.py
+   # W/O FSP-O
+   DEFINE FLASH_REGION_FV_FSP_SUBREGION_FSP_T_SIZE                = 0x00020000  #    {0x00F60000}
+   DEFINE FLASH_REGION_FV_FSP_SUBREGION_FSP_O_SIZE                = 0x00000000  # N/A
+   # Main PEI include vtf0
+   DEFINE FLASH_REGION_FV_RECOVERY_SIZE                           = 0x00280000  # 0x00F60000
+   # No HP SEC as HP SEC doesn't support native X64 PEI SEC, using UefiCpuPkg SecCoreNative.inf + Vtf0.inf in FV recovery instead SEC.
+   DEFINE FLASH_REGION_FV_SEC_SIZE                                = 0x00000000  # N/A
+!else
+   # With FSP-O
+   # Main PEI
+   DEFINE FLASH_REGION_FV_RECOVERY_SIZE                           = 0x00270000  # 0x00F60000
+
+   # Declare HP SEC region to store FspTopAt4G.fd (FPM reserved + FSP-T + FSP-O) to align with RC, size should match to gBoardModuleTokenSpaceGuid.PcdFspTopSize
+   DEFINE FLASH_REGION_FV_SEC_SIZE                                = 0x00030000  # 0x011D0000
+   ## 1. FspTopAt4G contains FSP components (FSP-T and FSP-O) which should be put at Top 4G location, these FSP
+   ##    components come from FSP build directly, which require base and size MUST align with the settings under
+   ##    XXXFspPkg\XXXFspPkg.fdf - PcdFlashFvFsptSize/PcdFlashFvFspoSize
+   ## 2. FspTopAt4G may have a padding file at start for 64KB alignment requirement or reserve size for future use.
+   ##    So make sure PcdFspTopSize - (PcdFlashFvFspTSize + PcdFlashFvFspOSize) is at least 0x2000 (FBM_OFFSET_TO_FSPT)
+   DEFINE FLASH_REGION_FV_FSP_SUBREGION_FSP_T_SIZE                = 0x00010000  #    {0x011D2000}
+   DEFINE FLASH_REGION_FV_FSP_SUBREGION_FSP_O_SIZE                = 0x0001E000  #    {0x011E2000}
+!endif
+
+# Below if condition string is use for PantherLakeBoardPkg\Tools\StripFlashmap.py parsing condition, don't change it!
+!else #(Release)
+  !if $(MULTIPLE_FIRMWARE_VOLUME_SUPPORT) == TRUE
+   DEFINE FLASH_REGION_FVMAIN_SIZE                                = 0x005A0000  # 0x00000000
+   DEFINE FLASH_REGION_HP_CORE_ADDON_SIZE                         = 0x00290000  # 0x00607000
+   DEFINE FLASH_REGION_HP_FEATURES_ADDON_SIZE                     = 0x00257000  # 0x00907000
+  !else
+   DEFINE FLASH_REGION_FVMAIN_SIZE                                = 0x00A87000  # 0x00000000
+  !endif
+   DEFINE FLASH_REGION_RESERVED_SIZE                              = 0x00004000  # 0x00A87000
+   DEFINE FLASH_REGION_CUSTOMLOGO_SIZE                            = 0x00008000  # 0x00A8B000
+   DEFINE FLASH_REGION_ELECTRONIC_LABEL_SIZE                      = 0x00032000  # 0x00A93000
+   DEFINE FLASH_REGION_SECURE_BOOT_LOG_SIZE                       = 0x00011000  # 0x00AC5000
+
+   DEFINE FLASH_REGION_NVSTORAGE_SIZE                             = 0x00080000  # 0x00AD6000
+   DEFINE FLASH_REGION_NVSTORAGE_SUBREGION_NV_VARIABLE_STORE_SIZE = 0x0003E000  #    {0x00AD6000}
+   DEFINE FLASH_REGION_NVSTORAGE_SUBREGION_NV_FTW_WORKING_SIZE    = 0x00002000  #    {0x00B03000}
+   DEFINE FLASH_REGION_NVSTORAGE_SUBREGION_NV_FTW_SPARE_SIZE      = 0x00040000  #    {0x00B05000}
+
+   # Region A Descriptor
+   DEFINE FLASH_REGION_A_HEADER_SIZE                              = 0x00004000  # 0x00B56000
+
+   # PEI Relocation Data
+   DEFINE FLASH_REGION_FV_RECOVERY_RELOC_DATA_SIZE                = 0x00000000  # 0x00B5A000
+   DEFINE FLASH_REGION_MICROCODE_SIZE                             = 0x000F3000  # 0x00B5A000
+
+   # For HP KBC
+   DEFINE FLASH_REGION_FV_HP_EC_SIZE                              = 0x00132000  # 0x00C4D000
+   DEFINE FLASH_REGION_FV_HP_BASE_EC_SIZE                         = 0x00000000  #    {0x00C4D000}
+   DEFINE FLASH_REGION_FV_HP_KBC_SIZE                             = 0x00132000  #    {0x00D7E000}
+
+   #
+   # *NOTE:BIOS Startup ACM Binary should be aligned on 4kB boundary and have 288kB within a 512-kB aligned chunk.
+   #       Use Intel RC FvFwBinaries FV region use HP BIOSAC region instead, BIOSAC region with FV header and padding bytes
+   #       to ensure BIOS Startup ACM can meet requirements:
+   #       1. 4k boundary alignment.
+   #       2. 288kb withing a 512-kb align chunk.
+   #       Thus BIOSAC region area S-ACM data cannot overlap with xx00000h and xx80000h
+   #       BIOS Region offset location must either: 
+   #       1. ACM resides in upper 0~512K chunk: (00X00000h - 4K = 00XFF000h) < BIOSAC offset < (00X38000h - 4K = 00X37000h) or
+   #       2. ACM resides in lower 512K~1024K chunk: (00X80000h - 4K = 00X7F000h) < BIOSAC offset < (00XB8000h - 4K = 00XB7000h)
+   #       *NOTE: 4K means the data with FV header data and FFS padding bytes for make ACM meet 4K alignment.
+   #
+   DEFINE FLASH_REGION_BIOSAC_SIZE                                = 0x00049000  # 0x00D7F000 ~ 0x00DC8000 (MAKE SURE NO overlap/cross 512kb alignment chunks)
+
+   #
+   # the size of FSP regions reference: Intel\PantherLakeBoardPkg\Include\Fdf\FlashMapInclude.fdf
+   #
+   # (Unsupport FSP-O arch (PcdFspWrapperResetVectorInFsp = FALSE)
+   # +--------------------+
+   # |  Fsp_Rebased_S.fd  |
+   # +--------------------+
+   # |  Fsp_Rebased_M.fd  |
+   # +--------------------+
+   # |  Fsp_Rebased_T.fd  |
+   # +--------------------+
+   # |  FVRECOVERY        |
+   # +--------------------+
+   #
+   # (Support FSP-O/T arch (PcdFspWrapperResetVectorInFsp = TRUE)
+   # +--------------------+
+   # |  FvFspS            |
+   # +--------------------+
+   # |  Fsp_Rebased_M.fd  |
+   # +--------------------+
+   # |  FVRECOVERY        |
+   # +--------------------+--------------------+
+   # |  Padding reserved  |                    |
+   # +--------------------+  FspTop region     |
+   # |  Fsp_Rebased_T.fd  |  FspTopAt4G.fd     |
+   # +--------------------+ (HP FV_SEC region) |
+   # |  Fsp_Rebased_O.fd  |                    |
+   # +--------------------+--------------------+
+   #
+   DEFINE FLASH_REGION_FV_FSP_SUBREGION_FSP_S_SIZE                = 0x00060000  #    {0x00DC8000}
+   DEFINE FLASH_REGION_FV_FSP_SUBREGION_FSP_M_SIZE                = 0x00110000  #    {0x00E28000}
+!if gFspWrapperFeaturePkgTokenSpaceGuid.PcdFspWrapperResetVectorInFsp == FALSE  # !!IMPORTANT!! Must make sure PcdFspWrapperResetVectorInFsp PCD here in order to support RC BssGen.py
+   # W/O FSP-O
+   DEFINE FLASH_REGION_FV_FSP_SUBREGION_FSP_T_SIZE                = 0x00020000  #    {0x00F38000}
+   DEFINE FLASH_REGION_FV_FSP_SUBREGION_FSP_O_SIZE                = 0x00000000  # N/A
+   # Main PEI include vtf0
+   DEFINE FLASH_REGION_FV_RECOVERY_SIZE                           = 0x002A8000  # 0x00F58000
+   # No HP SEC as HP SEC doesn't support native X64 PEI SEC, using UefiCpuPkg SecCoreNative.inf + Vtf0.inf in FV recovery instead SEC.
+   DEFINE FLASH_REGION_FV_SEC_SIZE                                = 0x00000000  # N/A
+!else
+   # With FSP-O
+   # Main PEI
+   DEFINE FLASH_REGION_FV_RECOVERY_SIZE                           = 0x002A8000  # 0x00F38000
+
+   # Declare HP SEC region to store FspTopAt4G.fd (FPM reserved + FSP-T + FSP-O) to align with RC, size should match to gBoardModuleTokenSpaceGuid.PcdFspTopSize
+   DEFINE FLASH_REGION_FV_SEC_SIZE                                = 0x00020000  # 0x011E0000
+   ## 1. FspTopAt4G contains FSP components (FSP-T and FSP-O) which should be put at Top 4G location, these FSP
+   ##    components come from FSP build directly, which require base and size MUST align with the settings under
+   ##    XXXFspPkg\XXXFspPkg.fdf - PcdFlashFvFsptSize/PcdFlashFvFspoSize
+   ## 2. FspTopAt4G may have a padding file at start for 64KB alignment requirement or reserve size for future use.
+   ##    So make sure PcdFspTopSize - (PcdFlashFvFspTSize + PcdFlashFvFspOSize) is at least 0x2000 (FBM_OFFSET_TO_FSPT)
+   DEFINE FLASH_REGION_FV_FSP_SUBREGION_FSP_T_SIZE                = 0x0000A000  #    {0x011E4000}
+   DEFINE FLASH_REGION_FV_FSP_SUBREGION_FSP_O_SIZE                = 0x00012000  #    {0x011EE000}
+!endif
+
+# Below if condition string is use for PantherLakeBoardPkg\Tools\StripFlashmap.py parsing condition, don't change it!
+!endif #(Release)

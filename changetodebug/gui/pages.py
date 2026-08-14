@@ -10,8 +10,9 @@
 
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (QAbstractItemView, QCheckBox, QHBoxLayout,
-                             QHeaderView, QLabel, QLineEdit, QPlainTextEdit,
-                             QPushButton, QRadioButton, QSpinBox, QTableWidget,
+                             QHeaderView, QLabel, QLineEdit, QListWidget,
+                             QListWidgetItem, QPlainTextEdit, QPushButton,
+                             QRadioButton, QSpinBox, QSplitter, QTableWidget,
                              QTableWidgetItem, QVBoxLayout, QWidget)
 
 from ..core.tasks import MODE_MEMORY, MODE_SINGLE
@@ -81,6 +82,9 @@ class TaskPage(QWidget):
     def on_profile_changed(self, profile):
         pass
 
+    def on_base_path_changed(self, base):
+        pass
+
     def on_debug_flag_changed(self, enabled):
         pass
 
@@ -128,15 +132,66 @@ class PatchSetPage(TaskPage):
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        # 三個欄位都設成 Interactive 才能用滑鼠拖曳分隔線調整寬度；
+        # Stretch / ResizeToContents 由 Qt 全權控制，使用者拖不動。
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(self.COL_TARGET, QHeaderView.Stretch)
-        header.setSectionResizeMode(self.COL_KIND, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(self.COL_FLAG, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        # 最後一欄自動吸收剩餘寬度，右邊不會留下一片空白。
+        # 前兩欄的邊界照樣可以拖，寬度仍由使用者決定。
+        header.setStretchLastSection(True)
+        header.setMinimumSectionSize(60)
+        header.setSectionsMovable(True)         # 欄位順序也可以拖著換
+        header.sectionResized.connect(self._on_section_resized)
+        self.table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self.table.setWordWrap(False)
         self.table.itemChanged.connect(self._refresh_summary)
-        self.body_layout.addWidget(self.table, 1)
+
+        # 左邊選專案、右邊選規則。PCD 掃描型規則會套用到每個專案的同名檔，
+        # 不選的話就是全部一起改——多專案共用一棵 source 時常常只想改其中一兩個。
+        split = QSplitter(Qt.Horizontal)
+        split.setChildrenCollapsible(False)
+
+        project_panel = QWidget()
+        project_box = QVBoxLayout(project_panel)
+        project_box.setContentsMargins(0, 0, 0, 0)
+        project_box.setSpacing(4)
+        self.project_label = QLabel("套用專案")
+        self.project_label.setObjectName("Hint")
+        project_box.addWidget(self.project_label)
+
+        self.project_list = QListWidget()
+        self.project_list.setAlternatingRowColors(True)
+        self.project_list.setMinimumWidth(120)
+        self.project_list.setToolTip(
+            "只有 PCD 掃描型規則（例如 Z*PkgConfig.dsc）會受此影響。\n"
+            "以 sub_path 指定路徑的規則與新增檔案不分專案，一律套用。")
+        self.project_list.itemChanged.connect(self._refresh_summary)
+        project_box.addWidget(self.project_list, 1)
+
+        project_btns = QHBoxLayout()
+        project_btns.setSpacing(4)
+        all_btn = QPushButton("全選")
+        none_btn = QPushButton("全不選")
+        all_btn.clicked.connect(lambda: self._set_all_projects(True))
+        none_btn.clicked.connect(lambda: self._set_all_projects(False))
+        project_btns.addWidget(all_btn)
+        project_btns.addWidget(none_btn)
+        project_box.addLayout(project_btns)
+
+        split.addWidget(project_panel)
+        split.addWidget(self.table)
+        split.setStretchFactor(0, 0)
+        split.setStretchFactor(1, 1)
+        split.setSizes([200, 720])
+        # 拖動分隔器只會改變表格寬度，不會觸發本頁的 resizeEvent，要另外接
+        split.splitterMoved.connect(lambda *_: self._autosize_columns())
+        self.body_layout.addWidget(split, 1)
 
         self._profile = None
+        self._base_path = ""
         self._debug_flag_enabled = False
+        self._columns_sized = False     # 使用者是否已自行調整欄寬
+        self._sizing = False            # 程式正在配寬（用來分辨不是使用者拖的）
 
     # ---- 內容 ----
     def on_profile_changed(self, profile):
@@ -147,6 +202,7 @@ class PatchSetPage(TaskPage):
         if profile is None:
             self.table.blockSignals(False)
             self.summary_label.setText("尚未偵測到專案世代，無法列出修改項目")
+            self._reload_projects()
             return
 
         rules = profile.all_rules
@@ -169,7 +225,104 @@ class PatchSetPage(TaskPage):
             self.table.setItem(row, self.COL_FLAG, QTableWidgetItem(flag))
 
         self.table.blockSignals(False)
+        self._autosize_columns()
+        self._reload_projects()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # 版面配置完成、真正拿得到寬度之後才算得出合理的初始欄寬
+        self._autosize_columns()
+
+    def _on_section_resized(self, index, *_):
+        """使用者親手拖過欄寬之後就不再自動配寬，尊重他的設定。
+
+        最後一欄是自動吸收剩餘寬度的，視窗一縮放它就會變寬變窄——那不是使用者調的，
+        不能拿來當「使用者已接手」的判斷依據。
+        """
+        header = self.table.horizontalHeader()
+        if self._sizing or header.visualIndex(index) == header.count() - 1:
+            return
+        self._columns_sized = True
+
+    def _content_width(self, column, minimum):
+        """取內容與標題兩者較寬的那個，再留一點邊。"""
+        header = self.table.horizontalHeader().sectionSizeHint(column)
+        return max(header, self.table.sizeHintForColumn(column), minimum) + 16
+
+    def _autosize_columns(self):
+        """配一組合理的初始寬度，直到使用者自己拖過為止。
+
+        最後一欄由 stretchLastSection 自動吸收，所以只需要算前兩欄——
+        並把該留給最後一欄的寬度先從「修改目標」扣掉，它才不會被撐得太寬。
+        """
+        if self._columns_sized or not self.table.rowCount():
+            return
+        viewport = self.table.viewport().width()
+        if viewport < 200:
+            return      # 版面還沒配置完，等下一次 resizeEvent 再算
+
+        self._sizing = True
+        try:
+            kind = self._content_width(self.COL_KIND, 74)
+            flag = self._content_width(self.COL_FLAG, 94)
+            self.table.setColumnWidth(self.COL_KIND, kind)
+            # 剩下的寬度給「修改目標」，它最長也最需要看清楚
+            self.table.setColumnWidth(self.COL_TARGET,
+                                      max(viewport - kind - flag - 4, 260))
+        finally:
+            self._sizing = False
+
+    def on_base_path_changed(self, base):
+        self._base_path = base or ""
+        self._reload_projects()
+
+    def _reload_projects(self):
+        """依目前的專案路徑與世代重新列出可選專案，盡量保留使用者原本的勾選。"""
+        from ..core.tasks.patchset import list_projects
+
+        previous = {self.project_list.item(i).text(): self.project_list.item(i).checkState()
+                    for i in range(self.project_list.count())}
+        self.project_list.blockSignals(True)
+        self.project_list.clear()
+
+        names = []
+        if self._profile is not None and self._base_path:
+            try:
+                names = list_projects(self._base_path, self._profile.pcd_scan_roots)
+            except Exception:
+                names = []
+
+        for name in names:
+            item = QListWidgetItem(name)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(previous.get(name, Qt.Checked))
+            self.project_list.addItem(item)
+
+        self.project_list.blockSignals(False)
+        self.project_list.setEnabled(bool(names))
+        if names:
+            self.project_label.setText(f"套用專案（{len(names)} 個）")
+        elif self._base_path:
+            self.project_label.setText("套用專案（掃描不到專案）")
+        else:
+            self.project_label.setText("套用專案（尚未選擇路徑）")
         self._refresh_summary()
+
+    def _set_all_projects(self, checked):
+        state = Qt.Checked if checked else Qt.Unchecked
+        self.project_list.blockSignals(True)
+        for row in range(self.project_list.count()):
+            self.project_list.item(row).setCheckState(state)
+        self.project_list.blockSignals(False)
+        self._refresh_summary()
+
+    def _checked_projects(self):
+        """回傳勾選的專案名稱；清單是空的（掃不到專案）時回 None 代表不過濾。"""
+        if self.project_list.count() == 0:
+            return None
+        return [self.project_list.item(i).text()
+                for i in range(self.project_list.count())
+                if self.project_list.item(i).checkState() == Qt.Checked]
 
     def on_debug_flag_changed(self, enabled):
         self._debug_flag_enabled = bool(enabled)
@@ -202,11 +355,22 @@ class PatchSetPage(TaskPage):
                       if self._debug_flag_enabled or not rules[rid].option_debug_flag)
         optional = sum(1 for r in rules.values() if r.option_debug_flag)
         note = "" if self._debug_flag_enabled else f"（其中 {optional} 條選配項目未啟用）"
-        self.summary_label.setText(
-            f"共 {len(rules)} 條規則，已勾選 {len(checked)} 條，本次將套用 {applied} 條 {note}")
+        text = f"共 {len(rules)} 條規則，已勾選 {len(checked)} 條，本次將套用 {applied} 條 {note}"
+
+        projects = self._checked_projects()
+        if projects is not None:
+            total = self.project_list.count()
+            if len(projects) < total:
+                text += f"　｜　專案 {len(projects)}/{total}"
+                if not projects:
+                    text += "（未選任何專案，PCD 掃描型規則不會套用）"
+        self.summary_label.setText(text)
 
     def collect_options(self):
-        return {"enabled_ids": self._checked_ids() if self.table.rowCount() else None}
+        return {
+            "enabled_ids": self._checked_ids() if self.table.rowCount() else None,
+            "projects": self._checked_projects(),
+        }
 
 
 # ---------------------------------------------------------------- Driver Debug

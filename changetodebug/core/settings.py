@@ -13,6 +13,10 @@ DEFAULTS = {
     "backup": True,
     "dry_run": False,
     "verify_after_run": True,
+    "merge_fallback": True,
+    # 解決合併衝突用的外部工具。VS Code 的用法為
+    #   code --merge <目前內容> <profile 期望> <共同起點> <輸出>
+    "merge_tool_command": "code",
     "enable_all_debug_flags": False,
     "driver_mode": "memory",
     "driver_names": "",

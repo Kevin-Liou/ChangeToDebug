@@ -129,6 +129,7 @@ class DriverDebugTask(Task):
             old_code=mem_cfg.get("pcd_pattern", ""),
             new_code=mem_cfg.get("pcd_replacement", ""),
             regex=True,
+            regex_applied_check=mem_cfg.get("pcd_applied_check", ""),
         )
 
         hit = False

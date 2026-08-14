@@ -76,6 +76,8 @@ class GenResult:
     warnings: list = field(default_factory=list)
     errors: list = field(default_factory=list)
     stats: dict = field(default_factory=dict)
+    base_files: dict = field(default_factory=dict)      # {base 內相對路徑: ORG 絕對路徑}
+    base_entries: list = field(default_factory=list)    # base_manifest.yaml 的 entries
 
     @property
     def ok(self):
@@ -240,6 +242,9 @@ def generate(options, logger):
             "sub", item["rel"], _label_for(item["rel"], item["order"]),
             item["old"], item["new"], org_files=[item["rel"]]))
 
+    # ---- 收集 base 快照：ORG 就是 base 的定義，這裡只是把對應關係記下來 ----
+    _collect_base(result, org_root, logger)
+
     # ---- 產生 YAML 並讀回驗證 ----
     result.yaml_text = _emit_yaml(options, result.rules, mod_root)
     _verify_yaml(result, logger)
@@ -251,6 +256,52 @@ def generate(options, logger):
         "unchanged": unchanged,
     }
     return result
+
+
+def _collect_base(result, org_root, logger):
+    """把每條規則對應的 ORG 原始檔整理成 base 快照清單與 manifest。
+
+    rule_id 必須與 profiles.py 載入時的編號完全一致，否則階段 4 找不到對應的 base：
+      new_files -> new:N、modifications -> mod:N、platform_pcd_modifications -> pcd:N
+    各自依區塊內的出現順序編號，也就是 _emit_yaml 的輸出順序。
+    """
+    from .basesnap import SOURCE_ORG, project_of, sha256_of
+
+    org_root = Path(org_root)
+    prefix = {"new": "new", "sub": "mod", "pcd": "pcd"}
+    covered = missing = 0
+
+    for kind in ("new", "sub", "pcd"):
+        for index, rule in enumerate(r for r in result.rules if r.kind == kind):
+            entry = {"rule_id": f"{prefix[kind]}:{index}", "label": rule.label}
+            if kind == "sub":
+                entry["sub_path"] = rule.target
+            elif kind == "pcd":
+                entry["file_name"] = rule.target
+
+            if kind == "new":
+                entry.update(base_file="", reason="新增檔案，不需要 base")
+                result.base_entries.append(entry)
+                continue
+
+            source = org_root / rule.org_files[0] if rule.org_files else None
+            if source is None or not source.is_file():
+                entry.update(base_file="", reason="ORG 中找不到對應檔案")
+                result.base_entries.append(entry)
+                missing += 1
+                continue
+
+            rel = rule.org_files[0]
+            result.base_files[rel] = str(source)
+            entry.update(base_file=rel, source=SOURCE_ORG, sha256=sha256_of(source))
+            if len(rule.org_files) > 1:
+                entry["covers"] = list(rule.org_files)
+                entry["representative"] = project_of(rel)
+            result.base_entries.append(entry)
+            covered += 1
+
+    logger.info(f"base 快照：{covered} 條規則可對應，缺 {missing} 條，"
+                f"共 {len(result.base_files)} 個檔案")
 
 
 def _label_for(rel, order):
@@ -474,7 +525,8 @@ def roundtrip_check(yaml_text, options, logger):
                                      task_keys=["patchset"], options={"patchset": {}},
                                      dry_run=False, backup=False,
                                      enable_all_debug_flags=True,
-                                     verify_after_run=True),
+                                     verify_after_run=True,
+                                     diagnose=False),   # 產生器會刻意製造失敗，診斷只是噪音
                           logger)
         report["applied"] = summary.overall.changed
         report["failed"] = summary.overall.failed

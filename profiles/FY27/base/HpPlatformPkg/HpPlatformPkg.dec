@@ -1,0 +1,253 @@
+#
+# (c) Copyright 2014 - 2026 HP Development Company, L.P.
+# This software and associated documentation (if any) is furnished under a license and may only be used or
+# copied in accordance with the terms of the license. Except as permitted by such license, no part of this
+# software or documentation may be reproduced, stored in a retrieval system, or transmitted in any
+# form or by any means without the express written consent of HP Development Company.
+#
+# Module Name: HpPlatformPkg.dec
+#
+
+[Defines]
+   DEC_SPECIFICATION              = 0x0001001A
+   PACKAGE_NAME                   = HpPlatformPkg
+   PACKAGE_GUID                   = BFB93CF0-51D5-480d-995F-84F9A7A64DAF
+   PACKAGE_VERSION                = 0.1
+
+[Includes]
+   Include
+   Include/$(HP_PLATFORM_TYPE)/Setup
+
+[LibraryClasses]
+
+[Guids]
+   gEfiHpPlatformPkgTokenSpaceGuid = { 0x147f9d49, 0xa8dc, 0x4089, { 0x99, 0x4b, 0x3e, 0xb9, 0x6d, 0xc2, 0xdb, 0x1c }}
+
+   #Include\Guid\PlatformUndi.h
+   gPlatformUndiDriverGuid = {0xC358B1F8, 0x8A88, 0x40b6, { 0x89, 0xBB, 0x28, 0xEC, 0xD6, 0xED, 0xDB, 0x24 }}
+
+   gHpPlatformMudDxeSmmInterfaceReadyGuid = { 0x284a8690, 0xc038, 0x4a9e, { 0x93, 0x5d, 0x90, 0x71, 0x78, 0x1a, 0xa8, 0x82 } }
+
+   # MTK Wi-Fi related modules will use this as a dependency, to allow platform determine when to load Wi-Fi
+   gEfiMtkWifiSupportGuid = { 0x6B073D7F, 0x86F5, 0x43BB, { 0xA4, 0xDE, 0xAC, 0x10, 0x93, 0x85, 0x55, 0xB8 } }
+
+[Ppis]
+
+[PcdsFixedAtBuild]
+   ## FFS filename to find the ACPI tables
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdAcpiTableStorageFile_1|{ 0x25, 0x4e, 0x37, 0x7e, 0x01, 0x8e, 0xee, 0x4f, 0x87, 0xf2, 0x39, 0xc, 0x23, 0xc6, 0x6, 0xcd }|VOID*|0x00000001
+
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdSioBaseAddress|0x260|UINT64|0x00000002
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdSioHmBaseAddress|0x900|UINT16|0x00000003
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdBdsDispatchExternalOprom|0x03|UINT8|0x00000004
+
+   gEfiHpPlatformPkgTokenSpaceGuid.PlatformEMMCPrescentGpioPin|0xFFFFFFFF|UINT32|0x00000011
+
+
+   ## FFS filename to find the PXE UNDI ROM image.   {0x58531F11, 0x5C10, 0x4dea, 0xA5, 0x4C, 0x0A, 0x01, 0x7F, 0xA0, 0x34, 0x25}
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdPxeUndiFileGuid|{ 0x11, 0x1F, 0x53, 0x58, 0x10, 0x5c, 0xea, 0x4d, 0xa5, 0x4c, 0x0a, 0x01, 0x7f, 0xa0, 0x34, 0x25 }|VOID*|0x80000001
+
+   ## FFS filename to find Realtek RTK8153 USB LAN PXE UNDI ROM image.
+   ## { 0x3f143882, 0xee9f, 0x4a69, 0x04, 0xb6, 0x2d, 0x7a, 0x21, 0x59, 0x80, 0xf7}
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdUsbRtk8153PxeUndiFileGuid | { 0x82, 0x38, 0x14, 0x3f, 0x9f, 0xee, 0x69, 0x4a, 0x04, 0xb6, 0x2d, 0x7a, 0x21, 0x59, 0x80, 0xf7 }|VOID*|0x80000003
+
+   ## FFS filename to find Realtek RTK8153 USB LAN PXE UNDI ROM Driver.
+   # a17522af-9e76-4f11-b944-0c6b97b8f095
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdUsbRtk8153PxeUndiDriverFileGuid | { 0xaf, 0x22, 0x75, 0xa1, 0x76, 0x9e, 0x11, 0x4f, 0x44, 0xb9, 0x0c, 0x6b, 0x97, 0xb8, 0xf0, 0x95 }|VOID*|0x80000004
+
+   # Display link EFI driver {4ef6d075-cf71-4c60-801d-21e96617bbf4}
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdUsbDisplayLinkPxeUndiDriverFileGuid | { 0x74, 0xd0, 0xf6, 0x4e, 0x71, 0xcf, 0x60, 0x4c, 0x80, 0x1d, 0x21, 0xe9, 0x66, 0x17, 0xbb, 0xf4 }|VOID*|0x80000005
+
+   ##
+   ## VIDEO ROM File PCD definition +++++++
+
+   ## FFS filename to find the Intel IGD VBIOS image.   {0x29206fc2, 0x9eab, 0x4612, 0xac, 0xa1, 0x1e, 0x3d, 0x09, 0x8f, 0xb1, 0xb3}
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdIntelVbiosFileGuid1|{ 0xc2, 0x6f, 0x20, 0x29, 0xab, 0x9e, 0x12, 0x46, 0xac, 0xa1, 0x1e, 0x3d, 0x09, 0x8f, 0xb1, 0xb3 }|VOID*|0x90000001
+   ## FFS filename to find the $(HP_PLATFORM_PACKAGE)\OptionRoms\Video\LegacyRom\Nvidia\N17SG2  VBIOS image.  { 0x22578c9e, 0x5a1d, 0x11e2, 0xa1, 0xb6, 0x15, 0x42, 0x61, 0x88, 0x70, 0x9b }
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdNvidiaVbios1FileGuid|{ 0x9e, 0x8C, 0x57, 0x22, 0x1d, 0x5a, 0xe2, 0x11, 0xa1, 0xb6, 0x15, 0x42, 0x61, 0x88, 0x70, 0x9b }|VOID*|0x90000002
+   ## FFS filename to find the $(HP_PLATFORM_PACKAGE)\OptionRoms\Video\LegacyRom\Nvidia\N19MQ1_14W VBIOS image.  { 0x4a640366, 0x5a1d, 0x11e2, 0xa1, 0xb6, 0x15, 0x42, 0x61, 0x88, 0x70, 0x9b }
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdNvidiaVbios2FileGuid|{ 0x66, 0x03, 0x64, 0x4a, 0x1d, 0x5a, 0xe2, 0x11, 0x84, 0x42, 0x47, 0x42, 0x61, 0x88, 0x70, 0x9b }|VOID*|0x90000003
+   ## FFS filename to find the $(HP_PLATFORM_PACKAGE)\OptionRoms\Video\LegacyRom\Nvidia\N19MQ1_15W VBIOS image.  { 0x608e43f2, 0x372b, 0x400b, 0x80, 0xf3, 0x87, 0x5c, 0xc5, 0x63, 0xb2, 0xba }
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdNvidiaVbios3FileGuid|{ 0xf2, 0x43, 0x8e, 0x60, 0x2b, 0x37, 0x0b, 0x40, 0x80, 0xf3, 0x87, 0x5c, 0xc5, 0x63, 0xb2, 0xba }|VOID*|0x90000004
+
+   ## FFS filename to find the default Intel VBT file for S600G10-V75 650G10 KVMr enabled sku used
+   ## {596D8D8D-E793-44c6-B3CB-0C3FB89A94B3}
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdIntelVbtFileGuidKVMr|{ 0x89, 0x8d, 0x6d, 0x59, 0x93, 0xe7, 0xc6, 0x44, 0xb3, 0xcb, 0x0c, 0x3f, 0xb8, 0x9a, 0x94, 0xb9 }|VOID*|0x00000010
+
+   ## VIDEO ROM File PCD definition -------
+
+   #
+   # HDMI RT PWR DOWN
+   #
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdHdmiRtPwrDown|0xFFFFFFFF|UINT32|0x0000003B
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdHdmiRtPwrDownActive|0|BOOLEAN|0x0000003C
+
+   ## PCDs for DPTF of x360
+
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdTouchPanelPowerGpio|0xFFFFFFFF|UINT32|0x00000020
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdTouchPanelPowerActive|0|BOOLEAN|0x00000021
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdTouchPanelInterruptActive|0|BOOLEAN|0x00000025
+
+   ## Touch Panel LTR Setting
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdTouchpanelLtrIdle|0xFFFF|UINT16|0x00000026
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdTouchpanelLtrSSactive|0xFFFF|UINT16|0x00000027
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdTouchpanelLtrFMactive|0xFFFF|UINT16|0x00000028
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdTouchpanelLtrFMPactive|0xFFFF|UINT16|0x00000029
+
+   # ADP_PRES_OUT
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdAcPresentGpio|0xFFFFFFFF|UINT32|0x0000002A
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdAcPresentGpioActive|1|UINT8|0x0000002B
+
+# G11 Display Feature requirment +++
+   #
+   # FFS filename to find the Intel VBT file (Enable DMRRS).
+   #
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdIntelVbtFileGuid_DMRRS|{ 0xae, 0xa3, 0x26, 0x72, 0xe0, 0x12, 0x55, 0x4c, 0xad, 0xe1, 0x40, 0x4c, 0x71, 0x3f, 0xc4, 0x3c }|VOID*|0x0000002C
+
+   #
+   # FFS filename to find the Intel VBT file (Enable DMRRS, PSR).
+   #
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdIntelVbtFileGuid_DMRRS_PSR|{ 0x99, 0x10, 0x12, 045, 0x4e, 0x36, 0x53, 0x4b, 0xb3, 0xc6, 0xef, 0xd8, 0x66, 0x6, 0x59, 0x63 }|VOID*|0x0000002D
+
+   #
+   # FFS filename to find the Intel VBT file (Enable PSR).
+   #
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdIntelVbtFileGuid_PSR|{ 0xac, 0x8b, 0x24, 0x1f, 0x9c, 0x57, 0xd5, 0x42, 0xba, 0x64, 0xa3, 0x3d, 0x82, 0xf3, 0xd2, 0xe7 }|VOID*|0x0000002E
+
+   #
+   # FFS filename to find the Intel VBT file (Enable DMRRS, PSR, sDRRS, VRR).
+   #
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdIntelVbtFileGuid_DMRRS_PSR_SDRRS_VRR|{ 0xb3, 0x8e, 0x8d, 0x18, 0x3c, 0xef, 0xb4, 0x42, 0xba, 0xe, 0x22, 0x3b, 0x7b, 0x4, 0x6d, 0x70 }|VOID*|0x0000002F
+
+   #
+   # FFS filename to find the Intel VBT file (Enable DMRRS, PSR, VRR).
+   #
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdIntelVbtFileGuid_DMRRS_PSR_VRR|{ 0xc4, 0x9b, 0x84, 0xce, 0xae, 0x88, 0x55, 0x4e, 0x0f, 0x18, 0x17, 0xde, 0x81, 0x71, 0x72, 0x69 }|VOID*|0x00000030
+
+   #
+   # FFS filename to find the Intel VBT file (Enable DMRRS, VRR).
+   #
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdIntelVbtFileGuid_DMRRS_VRR|{ 0xab, 0x96, 0x11, 0x1f, 0x4c, 0xb3, 0x4c, 0x65, 0x81, 0x40, 0xda, 0x34, 0x00, 0x82, 0x72, 0x4a }|VOID*|0x00000031
+
+   #
+   # FFS filename to find the Intel VBT file (Enable PSR, VRR).
+   #
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdIntelVbtFileGuid_PSR_VRR|{ 0x22, 0xcd, 0xbc, 0xd5, 0xd9, 0x50, 0x4b, 0x7c, 0x8d, 0xf6, 0x25, 0x7d, 0x86, 0x99, 0xe8, 0x17 }|VOID*|0x00000032
+
+   #
+   # FFS filename to find the Intel VBT file (Enable VRR).
+   #
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdIntelVbtFileGuid_VRR|{ 0xd5, 0xa2, 0x1e, 0x31, 0x14, 0x53, 0x43, 0xb7, 0x81, 0x27, 0x65, 0x8f, 0x90, 0x9a, 0x89, 0x92 }|VOID*|0x00000033
+
+   #
+   # FFS filename to find the Intel VBT file (Enable DMRRS).
+   #
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdIntelVbtFileGuid_DMRRS_T8|{ 0x5e, 0x48, 0x91, 0x60, 0xad, 0x5b, 0x42, 0xdf, 0x93, 0xc7, 0x5b, 0x2f, 0x2f, 0x85, 0xa3, 0xed }|VOID*|0x00000040
+
+   #
+   # FFS filename to find the Intel VBT file (Enable DMRRS, PSR, VRR).
+   #
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdIntelVbtFileGuid_DMRRS_PSR_VRR_T8|{ 0xa4, 0x5b, 0x84, 0xce, 0xae, 0x88, 0x55, 0x4e, 0x0f, 0x18, 0x37, 0xde, 0x81, 0x71, 0x4a, 0x6b }|VOID*|0x00000041
+
+   #
+   # FFS filename to find the Intel VBT file (Enable PSR, Replay, VRR).
+   #
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdIntelVbtFileGuid_PSR_REPLAY_VRR|{ 0xf5, 0x1c, 0x9b, 0xb4, 0x6f, 0x98, 0x44, 0xbe, 0xaf, 0x1c, 0xf4, 0x15, 0xbf, 0x9f, 0x75, 0xd2 }|VOID*|0x00000042
+
+   #
+   # FFS filename to find the Intel VBT file (Enable DMRRS, PSR, Replay, VRR).
+   #
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdIntelVbtFileGuid_DMRRS_PSR_REPLAY_VRR|{ 0x64, 0x1c, 0xc8, 0x72, 0x49, 0xb6, 0x42, 0x09, 0x8c, 0xb2, 0x4a, 0x2b, 0x3c, 0xda, 0x20, 0x5c }|VOID*|0x00000043
+
+   #
+   # FFS filename to find the Intel VBT file (OLED).
+   #
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdIntelVbtFileGuid_OLED|{ 0x10, 0xf7, 0x2a, 0x1c, 0xb7, 0x40, 0x24, 0x46, 0xa4, 0xe5, 0x61, 0xd1, 0xdd, 0x9a, 0xfc, 0xc4 }|VOID*|0x00000044
+
+
+   # FFS filename to find the Intel VBT file (Enable DMRRS, PSR, VRR, HDR, DRR).
+   #
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdIntelVbtFileGuid_DMRRS_PSR_VRR_HDR_DRR|{0x95, 0xb8, 0xcc, 0x66, 0x7a, 0xed, 0x3a, 0x4a, 0x9e, 0xf9, 0xe7, 0x6c, 0xdd, 0x7c, 0xdc, 0x25}|VOID*|0x00000045
+
+   #
+   # FFS filename to find the Intel VBT file (Enable PSR, REPLAY, VRR, DRR).
+   #
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdIntelVbtFileGuid_PSR_REPLAY_VRR_DRR|{0xa5, 0x7d, 0xa9, 0x23, 0xa2, 0x43, 0x2e, 0x46, 0xa8, 0xc4, 0xc2, 0x34, 0x4f, 0xe2, 0x34, 0x0c}|VOID*|0x00000046
+
+# G11 Display Feature requirment ---
+
+   ## HP Series identifier for multi-project build (CRB=0, DT800=80, DM800=8, AIO800=81, DM400=4, AIO400=41, NB800=800, NB1000=1000)
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdHpSeries|0|UINT16|0x00000034
+
+   ## HP Project index for multi-project build (CRB=0, Z_01=1, Z_11=11, Z_13=13, Z_21=21, Z_22=22, Z_70=70, Z_90=90, Z_97=97)
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdHpProjectIndex|0|UINT8|0x00000035
+
+   #
+   # FFS filename for the Panel EDID override image file. (Example)
+   #
+#   gEfiHpPlatformPkgTokenSpaceGuid.PcdExamplePanelEdidOverrideImageFileEdid|{ 0x14, 0x95, 0xe2, 0x74, 0x7e, 0x6, 0xb1, 0x46, 0xb2, 0xef, 0xa3, 0x40, 0x2a, 0x4c, 0x8f, 0x41 }|VOID*|0x00000030
+
+[PcdsFeatureFlag]
+   gEfiHpPlatformPkgTokenSpaceGuid.gMediaReaderPresent|FALSE|BOOLEAN|0x10000001
+   gEfiHpPlatformPkgTokenSpaceGuid.gWakeOnWWANSupport|FALSE|BOOLEAN|0x10000002
+   gEfiHpPlatformPkgTokenSpaceGuid.gLidSwitchEventSupport|FALSE|BOOLEAN|0x10000003
+   gEfiHpPlatformPkgTokenSpaceGuid.gScreenRotationEventSupport|FALSE|BOOLEAN|0x10000004
+   gEfiHpPlatformPkgTokenSpaceGuid.gInteliFFSSupport|FALSE|BOOLEAN|0x10000005
+   gEfiHpPlatformPkgTokenSpaceGuid.gESPAppSupport|TRUE|BOOLEAN|0x10000006
+   gEfiHpPlatformPkgTokenSpaceGuid.gIsIntel|TRUE|BOOLEAN|0x10000009
+   gEfiHpPlatformPkgTokenSpaceGuid.gEmbeddedControllerPresent|FALSE|BOOLEAN|0x1000000A
+
+   # PCD for Memory Speed Throttle Down support.
+   gEfiHpPlatformPkgTokenSpaceGuid.MemorySpeedThrottleDownSupport|FALSE|BOOLEAN|0x1000000B
+
+   # PCD to determine if platform supports Mixed DIMM Alert.
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdMixedDimmAlertSupport|FALSE|BOOLEAN|0x1000000C
+
+   ## PCD to define if platform supports Ambient light sensor feature.
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdAlsSupport|FALSE|BOOLEAN|0x1000000D
+
+
+[PcdsDynamic, PcdsDynamicEx]
+   #
+   # Dynamic PCD for HP Platform
+   #
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdPlatformBoardId|0|UINT32|0x30000000
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdIsConvertiblePlatform|FALSE|BOOLEAN|0x30000002
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdDGpuHwPresent|FALSE|BOOLEAN|0x30000003
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdTofHwPresent|FALSE|BOOLEAN|0x30000004
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdMeSku|0|UINT8|0x30000005
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdAudioSsid|0xFFFF|UINT16|0x30000006 # PCD for HDA controller and verb codec programming
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdIsMudWorkstationProductFamily|FALSE|BOOLEAN|0x30000007
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdColorAlsHwPresent|FALSE|BOOLEAN|0x30000008
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdMemoryDownId|0x00000000|UINT32|0x30000009
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdPlatformIshEnable|0|UINT8|0x3000000A
+
+   #
+   # Dynamic PCD for HP PlatformID
+   #
+   # This PCD can only be used in HpPlatformPkg.
+   # Do not use it out side of HpPlatformPkg.
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdHpPlatformID|0xFFFFFFFF|UINT32|0x3000000B
+
+   # This PCD can only be used in HpPlatformPkg. 
+   # Record the current Battery Wh usage.
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdHpBatteryWh|0xFFFF|UINT16|0x3000000C
+
+[PcdsFixedAtBuild,PcdsPatchableInModule]
+
+[PcdsFixedAtBuild, PcdsPatchableInModule, PcdsDynamic, PcdsDynamicEx]
+   ## GPIO configuration for Serial Port A support detection.
+   #  Structure: INTEL_GPIO_INFO { ExpanderNo, GpioNo, Active }
+   #    - ExpanderNo: GPIO expander number (0 = not expander)
+   #    - GpioNo: GPIO pad ID (GPIOV2_PAD_NONE or GPIOV2_PAD_INVALID = not supported)
+   #    - Active: Active level (0 = low active, 1 = high active)
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdSerialPortAGpio|{0}|INTEL_GPIO_INFO|0x3000000D {
+      <HeaderFiles>
+         Library/HpGpioLib.h
+         Nvl/Pch/GpioV2PinsNvlPchS.h
+         Nvl/Pcd/GpioV2NvlPcdPins.h
+      <Packages>
+         HpFeature/HpFeatureMisc/PubIntPkg/HpFeatureMiscPubIntPkg.dec
+         OneSiliconPkg/SiPkg.dec
+   }
+

@@ -8,6 +8,8 @@
   * 同一次執行共用一個備份時間戳，方便整批還原。
 """
 
+import dataclasses
+import difflib
 import os
 import re
 import shutil
@@ -26,9 +28,13 @@ STATUS_ERROR = "error"                # 讀寫或規則錯誤
 STATUS_SKIPPED = "skipped"            # 被選項過濾掉（例如 option_debug_flag）
 STATUS_COPIED = "copied"              # 新增檔案已複製
 STATUS_CONFLICT = "conflict"          # 目標檔已存在且內容不同，未覆蓋
+STATUS_MERGED = "merged"              # old_code 比對不到，改用 base 做 3-way merge 成功
+STATUS_MERGE_CONFLICT = "merge_conflict"   # 3-way merge 有衝突，未寫入，需人工處理
+STATUS_ROLLED_BACK = "rolled_back"    # 同一檔案有衝突，這條先前成功的修改已被還原
 
 #: 視為「這條規則沒問題」的狀態
-GOOD_STATUS = {STATUS_MODIFIED, STATUS_PREVIEW, STATUS_ALREADY, STATUS_NOOP, STATUS_COPIED}
+GOOD_STATUS = {STATUS_MODIFIED, STATUS_PREVIEW, STATUS_ALREADY, STATUS_NOOP,
+               STATUS_COPIED, STATUS_MERGED}
 
 STATUS_TEXT = {
     STATUS_MODIFIED: "已修改",
@@ -41,9 +47,16 @@ STATUS_TEXT = {
     STATUS_SKIPPED: "略過",
     STATUS_COPIED: "已新增",
     STATUS_CONFLICT: "已存在且不同",
+    STATUS_MERGED: "已合併",
+    STATUS_MERGE_CONFLICT: "合併衝突",
+    STATUS_ROLLED_BACK: "已還原",
 }
 
 _ENCODINGS = ("utf-8", "utf-8-sig", "cp950", "latin-1")
+
+#: base 與目前檔案的相似度低於此值就不做 3-way merge——
+#: 這種 base 不可能是這個檔案的祖先，合併結果沒有意義
+MIN_BASE_SIMILARITY = 0.5
 
 
 @dataclass
@@ -57,6 +70,8 @@ class Rule:
     old_code: str = ""
     new_code: str = ""
     regex: bool = False
+    regex_applied_check: str = ""       # regex 規則專用：套用後應該命中的樣式（用來辨識「已套用過」）
+    expect_count: int = 0               # > 0 時，命中數必須剛好這麼多，否則報錯不寫入
     option_debug_flag: bool = False     # True = 只有勾選「啟用所有 Debug Flag」才套用
     note: str = ""
     source: str = "modifications"       # modifications / platform_pcd_modifications / new_files
@@ -123,16 +138,28 @@ class PatchStats:
 
     @property
     def changed(self):
-        return self.count_of(STATUS_MODIFIED, STATUS_PREVIEW, STATUS_COPIED)
+        return self.count_of(STATUS_MODIFIED, STATUS_PREVIEW, STATUS_COPIED, STATUS_MERGED)
 
     @property
     def already(self):
         return self.count_of(STATUS_ALREADY)
 
     @property
+    def merged(self):
+        return self.count_of(STATUS_MERGED)
+
+    @property
+    def conflicted(self):
+        return self.count_of(STATUS_MERGE_CONFLICT)
+
+    @property
+    def rolled_back(self):
+        return self.count_of(STATUS_ROLLED_BACK)
+
+    @property
     def failed(self):
         return self.count_of(STATUS_NOT_FOUND, STATUS_MISSING_FILE, STATUS_ERROR,
-                             STATUS_CONFLICT)
+                             STATUS_CONFLICT, STATUS_MERGE_CONFLICT, STATUS_ROLLED_BACK)
 
     @property
     def skipped(self):
@@ -180,11 +207,14 @@ def write_text(file_path, content, encoding):
 class PatchEngine:
     """實際執行修補。dry_run / backup 等選項在建構時決定。"""
 
-    def __init__(self, logger, dry_run=False, backup=True, run_stamp=None):
+    def __init__(self, logger, dry_run=False, backup=True, run_stamp=None, diagnose=True,
+                 conflict_sink=None):
         self.logger = logger
         self.dry_run = dry_run
         self.backup = backup
         self.run_stamp = run_stamp or datetime.now().strftime("%Y%m%d%H%M%S")
+        self.diagnose = diagnose        # 比對失敗時是否輸出「最相似區塊」的差異
+        self.conflict_sink = conflict_sink   # 合併衝突時把三方內容交出去保存
         self._backed_up = set()
 
     # ---- 備份 ----
@@ -209,8 +239,26 @@ class PatchEngine:
         return len(self._backed_up)
 
     # ---- 單一規則 ----
-    def apply(self, file_path, rule):
+    def apply(self, file_path, rule, base_ref=None, reverse=False):
+        """套用一條規則。
+
+        base_ref 有值時（profile 帶了 base 快照），exact 比對失敗會改用 3-way merge：
+        以 base 為共同起點，判斷上游改的是不是我們要改的地方。
+
+        reverse=True 代表反向移除：把 new_code 換回 old_code。刻意用「反向套用」而不是
+        「還原成 base」——後者會把上游在這之後的改動一併抹掉，那不是精準移除。
+        """
         file_path = str(file_path)
+        forward_rule = rule
+
+        if reverse:
+            if rule.regex:
+                # regex 的 new_code 可能含 \1 回填，無法反推原文
+                self.logger.warn(f"regex 規則無法反向移除，已略過：{rule.label}")
+                return PatchResult(file_path, STATUS_SKIPPED, "regex 規則無法反向移除",
+                                   rule.rule_id, rule.label or rule.target_display)
+            rule = dataclasses.replace(rule, old_code=rule.new_code,
+                                       new_code=rule.old_code)
         label = rule.label or rule.target_display
 
         if not rule.old_code:
@@ -265,9 +313,36 @@ class PatchEngine:
                 self.logger.info(f"已套用過，略過：{file_path}  ({label})")
                 return PatchResult(file_path, STATUS_ALREADY, "內容已是修改後的樣子",
                                    rule.rule_id, label, verify=check)
+            # regex 規則的 new_code 可能含 \1 之類的回填，無法直接比對字面值，
+            # 因此另外用 regex_applied_check 判斷是否已經套用過（否則重跑會誤報失敗）。
+            if rule.regex and rule.regex_applied_check and _matches(rule.regex_applied_check, norm):
+                self.logger.info(f"已套用過，略過：{file_path}  ({label})")
+                return PatchResult(file_path, STATUS_ALREADY, "內容已是修改後的樣子",
+                                   rule.rule_id, label, verify=check)
+            # exact 比對不到時，若有 base 快照就改用 3-way merge
+            if base_ref is not None:
+                merged = self._merge_with_base(file_path, rule, norm, base_ref, label,
+                                               newline_style, encoding, check,
+                                               forward_rule, reverse)
+                if merged is not None:
+                    return merged
+
             self.logger.warn(f"找不到指定片段：{file_path}  ({label})")
+            if self.diagnose and not rule.regex:
+                from .diagnose import explain
+                self.logger.warn(explain(norm, old))
             return PatchResult(file_path, STATUS_NOT_FOUND, "找不到指定片段",
                                rule.rule_id, label)
+
+        # 守門：規則宣告了預期命中數就必須剛好相符。
+        # old_code 只保證在「產生 profile 當下的那份 source」中唯一，上游新增相似區塊後
+        # 可能變成命中多處——那會安靜地多改幾個地方，比對失敗至少還會叫。
+        if rule.expect_count and count != rule.expect_count:
+            self.logger.error(f"命中 {count} 處，與規則宣告的 {rule.expect_count} 處不符，"
+                              f"未寫入：{file_path}  ({label})")
+            return PatchResult(file_path, STATUS_ERROR,
+                               f"命中 {count} 處，預期 {rule.expect_count} 處",
+                               rule.rule_id, label, count)
 
         if self.dry_run:
             self.logger.info(f"[預覽] 將修改 {count} 處：{file_path}  ({label})")
@@ -284,6 +359,125 @@ class PatchEngine:
         self.logger.ok(f"已修改 {count} 處：{file_path}  ({label})")
         return PatchResult(file_path, STATUS_MODIFIED, f"已修改 {count} 處",
                            rule.rule_id, label, count, verify=check)
+
+    # ---- 3-way merge（exact 比對失敗後的退路） ----
+    def _merge_with_base(self, file_path, rule, current, base_ref, label,
+                         newline_style, encoding, check, forward_rule=None,
+                         reverse=False):
+        """以 base 快照為共同起點做三方合併。
+
+        回傳 PatchResult；判斷不適用時回傳 None，讓呼叫端沿用原本的「找不到片段」。
+
+        反向移除時把三方對調：以「base 套用規則後」當共同起點、「base 原樣」當我方，
+        合併結果就是「現況扣掉本規則的改動」，上游後來的改動不受影響。
+        """
+        from .threeway import added_lines, describe, merge_text
+
+        base_text = base_ref.read()
+        if base_text is None:
+            self.logger.debug(f"base 快照讀取失敗，改用一般流程：{file_path}")
+            return None
+
+        # base 是「改動前」的狀態，正向規則理論上一定套得上；
+        # 套不上代表這份 base 對不上這條規則，不能拿來 merge。
+        applied, count = _apply_rule_to_text(base_text, forward_rule or rule)
+        if count == 0 or applied == base_text:
+            self.logger.debug(f"規則在 base 上無法套用，不做 merge：{label}")
+            return None
+
+        if reverse:
+            base_text, ours_text = applied, base_text
+        else:
+            ours_text = applied
+
+        source = "借用其他專案的 base" if base_ref.approximate else "base"
+        if base_ref.approximate:
+            note = f"（{source}"
+            if base_ref.representative:
+                note += f"：{base_ref.representative}"
+            note += "）"
+        else:
+            note = ""
+
+        # base 必須真的像是這個檔案的祖先，否則合併出來的東西沒有意義。
+        # quick_ratio 是相似度的上界且只需線性時間，用來擋掉明顯不相干的 base 剛好。
+        if difflib.SequenceMatcher(
+                None, base_text.split("\n"), current.split("\n")
+        ).quick_ratio() < MIN_BASE_SIMILARITY:
+            self.logger.debug(f"base 與現況差異過大，不做 merge：{file_path}")
+            return None
+
+        result = merge_text(base_text, ours_text, current)
+
+        # 借用其他專案的 base 時，衝突多半只代表「這兩個專案的檔案本來就不同」，
+        # 而不是「上游改到了我們要改的地方」，報成衝突只會製造噪音並蓋掉真正的診斷。
+        # 這種情況退回原本的流程，由「找不到片段」加診斷訊息說明差異。
+        if result.conflicts and base_ref.approximate:
+            self.logger.info(
+                f"借用的 base 合併後有衝突（非本專案的 base），退回一般流程："
+                f"{file_path}  ({label})")
+            return None
+
+        if result.conflicts:
+            self.logger.error(
+                f"合併衝突，未寫入：{file_path}  ({label}){note}　"
+                f"上游與本規則改到同一段（{len(result.conflicts)} 處）")
+            for conflict in result.conflicts[:3]:
+                self.logger.warn(describe(conflict))
+            if len(result.conflicts) > 3:
+                self.logger.warn(f"（另有 {len(result.conflicts) - 3} 處衝突）")
+
+            # 把三方內容留下來，讓使用者可以用合併工具處理
+            if self.conflict_sink is not None and not self.dry_run:
+                record = self.conflict_sink(file_path, base_text, ours_text, current,
+                                            rule, len(result.conflicts),
+                                            encoding=encoding, newline=newline_style)
+                if record is not None:
+                    self.logger.info(f"衝突內容已保存：{Path(record.base).parent}")
+            return PatchResult(file_path, STATUS_MERGE_CONFLICT,
+                               f"合併衝突 {len(result.conflicts)} 處，需人工處理",
+                               rule.rule_id, label)
+
+        merged = result.text
+
+        # 守門：合併結果一定要真的含有本規則新增的內容，否則寧可宣告失敗。
+        # 這裡不能比對整段 new_code——merge 的前提就是 context 已經被上游改過，
+        # 整段一定對不上；只有「本規則實際新增的那幾行」才是有效的後置條件。
+        # 這條檢查擋得住 base 對不上而 merge 產出一份看似成功卻沒改到東西的結果。
+        added = added_lines(normalize_newlines(rule.old_code),
+                            normalize_newlines(rule.new_code))
+        if added:
+            missing = [line for line in added if line not in merged]
+            if missing:
+                self.logger.warn(f"合併結果不含本規則新增的內容，放棄合併："
+                                 f"{file_path}  ({label})")
+                return None
+        if merged == current:
+            self.logger.debug(f"合併結果與現況相同，不視為修改：{file_path}")
+            return None
+
+        # 事後驗證同樣不能比對整段 new_code，改成確認新增的行都在
+        merge_check = VerifyCheck(contains=list(added)) if added else None
+
+        if self.dry_run:
+            self.logger.info(
+                f"[預覽] 可用 3-way merge 套用：{file_path}  ({label}){note}　"
+                f"（採用上游 {result.took_theirs} 段、本規則 {result.took_ours} 段）")
+            return PatchResult(file_path, STATUS_PREVIEW, f"可合併{note}",
+                               rule.rule_id, label, 1)
+
+        self.backup_file(file_path)
+        try:
+            write_text(file_path, restore_newlines(merged, newline_style), encoding)
+        except Exception as exc:
+            self.logger.error(f"寫入失敗：{file_path} -> {exc}")
+            return PatchResult(file_path, STATUS_ERROR, str(exc), rule.rule_id, label)
+
+        self.logger.ok(
+            f"已用 3-way merge 套用：{file_path}  ({label}){note}　"
+            f"（採用上游 {result.took_theirs} 段、本規則 {result.took_ours} 段）")
+        return PatchResult(file_path, STATUS_MERGED, f"已合併{note}",
+                           rule.rule_id, label, 1, verify=merge_check)
 
     # ---- 新增檔案（profile 的 new_files） ----
     def copy_file(self, source, target, label="", overwrite=False):
@@ -324,6 +518,39 @@ class PatchEngine:
         self.logger.ok(f"已新增檔案：{target}")
         return PatchResult(str(target), STATUS_COPIED, "已新增", label=label, count=1,
                            verify=check)
+
+    # ---- 移除先前複製進來的新增檔案（new_files 的反向） ----
+    def remove_file(self, source, target, label=""):
+        """刪除 profile 帶進來的檔案。
+
+        只刪「確定是我們放的」——內容與來源檔不同代表有人改過，寧可留著讓人自己判斷。
+        """
+        source, target = Path(source), Path(target)
+        label = label or str(target)
+
+        if not target.is_file():
+            self.logger.info(f"檔案不存在，無須移除：{target}")
+            return PatchResult(str(target), STATUS_ALREADY, "檔案不存在，無須移除",
+                               label=label)
+
+        if source.is_file() and not _same_text(source, target):
+            self.logger.warn(f"檔案內容與來源不同，未移除：{target}")
+            return PatchResult(str(target), STATUS_CONFLICT,
+                               "內容與來源不同，可能被改過，未移除", label=label)
+
+        if self.dry_run:
+            self.logger.info(f"[預覽] 將移除檔案：{target}")
+            return PatchResult(str(target), STATUS_PREVIEW, "可移除", label=label, count=1)
+
+        self.backup_file(target)
+        try:
+            target.unlink()
+        except Exception as exc:
+            self.logger.error(f"移除失敗：{target} -> {exc}")
+            return PatchResult(str(target), STATUS_ERROR, str(exc), label=label)
+
+        self.logger.ok(f"已移除檔案：{target}")
+        return PatchResult(str(target), STATUS_MODIFIED, "已移除", label=label, count=1)
 
     # ---- 直接對整個檔案做字串取代（給 Driver Debug 用） ----
     @staticmethod
@@ -388,6 +615,29 @@ class PatchEngine:
         self.logger.ok(f"已更新：{file_path}")
         return PatchResult(file_path, STATUS_MODIFIED, "已更新", label=label, count=1,
                            verify=verify)
+
+
+def _apply_rule_to_text(text, rule):
+    """把一條規則套用在文字上，回傳 (結果, 取代次數)。套不上時回傳原文與 0。"""
+    old = normalize_newlines(rule.old_code)
+    new = normalize_newlines(rule.new_code)
+    if not old:
+        return text, 0
+    try:
+        if rule.regex:
+            return re.compile(old, re.MULTILINE).subn(new, text)
+    except re.error:
+        return text, 0
+    count = text.count(old)
+    return (text.replace(old, new) if count else text), count
+
+
+def _matches(pattern, text):
+    """安全地判斷 regex 是否命中；規則寫壞時當作沒命中，不讓它中斷主流程。"""
+    try:
+        return re.search(pattern, text, re.MULTILINE) is not None
+    except re.error:
+        return False
 
 
 def _same_text(path_a, path_b):

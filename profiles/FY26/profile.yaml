@@ -9,6 +9,9 @@ profile:
   display_name: FY26 (Panther Lake)
   description: HP FY26 code，已驗證版本 v00.02.00
   priority: 26
+  # base 快照的擷取來源：G:\Ptl（分支 Sync_v920301）當時的版本。
+  # 執行時會比對專案目前的 HEAD，偏離太多時在記錄中提醒，但不會阻擋執行。
+  base_commit: e0aab086
   detect:
     any:
       - dir: .gitman/Intel/PantherLakeBoardPkg

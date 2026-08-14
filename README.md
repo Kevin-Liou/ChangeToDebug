@@ -38,7 +38,9 @@ python ChangeToDebug_Start.py
 ### Debug Patch Set
 
 依偵測到的世代套用該世代 profile YAML 中的所有修改（CpuDeadLoop、DebugPrintErrorLevel、PostCode 導向序列埠、各子系統 DEBUG flag 等）。
-表格會列出每一條規則，可取消勾選不想套用的項目。
+右邊的表格會列出每一條規則，可取消勾選不想套用的項目。
+
+**左邊可以選要套用到哪些專案**。`platform_pcd_modifications` 這類 PCD 掃描規則（例如 `Z*PkgConfig.dsc`）預設會套用到 `MultiProject` 底下**每一個**專案的同名檔；多專案共用一棵 source、但只想改其中一兩個時，取消勾選即可。以 `sub_path` 指定路徑的規則與 `new_files` 不分專案，一律套用。
 
 `option_debug_flag` 的意義：
 
@@ -142,6 +144,57 @@ profile 搜尋順序（先找到的同名 key 優先）：
 
 ---
 
+## 目錄型 profile 與 base 快照
+
+profile 有兩種形態，兩種都能載入：
+
+| 形態 | 內容 |
+| --- | --- |
+| 單檔 | `profiles\FY28.yaml` |
+| 目錄 | `profiles\FY28\`（`profile.yaml` + `base\` + `base_manifest.yaml`） |
+
+同一個 key 兩種形態並存時，**目錄型優先**。
+
+`base\` 裡放的是「修改之前的完整原始檔」。有了它，當 codebase 更新導致 `old_code` 比對不到時，工具可以做 **3-way merge**：以 base 為共同起點，判斷上游改的是不是本規則要改的地方。
+
+- 上游改的是別處 → 自動合併，雙方改動都保留
+- 上游改到同一段 → 報衝突、**整個檔案不寫入**，三方內容存到 `ChangeToDebug_conflicts\<專案名>\<時間戳>\`，可按「解決衝突…」用合併工具處理
+
+沒有 base 的規則會退回原本的字串比對，行為不變。`base_manifest.yaml` 逐條記錄哪些規則有 base、哪些沒有以及原因。
+
+取得 base 的兩種方式：
+
+1. **產生 Profile…** 從 ORG/MOD 產生時勾「輸出成目錄（含 base 快照）」，ORG 就是 base
+2. **擷取 base 快照…** 對著一棵「尚未套用此 profile」的 source tree 按這個按鈕，工具會逐條比對，把處於改動前狀態的檔案複製成 base
+
+`profile:` 區塊可加 `base_commit:` 記錄產生基準，執行時會比對專案目前的 HEAD 並在記錄中提示偏離程度（不會阻擋執行）。
+
+---
+
+## 移除 Change
+
+執行列的「**移除 Change…**」把這個世代已套用的修改反向還原：`new_code` 換回 `old_code`。
+
+刻意不是「還原成 base 快照」——那會把上游在這之後的改動一併抹掉。反向套用只動本 profile 帶來的改動，遇到漂移時同樣走 3-way merge（把三方對調）。
+
+- `new_files` 帶進來的檔案會一併刪除，但**內容被改過就不刪**
+- **regex 規則會被略過**（`\1` 回填無法反推原文）
+- Driver Debug 與 POST Code Marker 不在範圍內（`DEBUG_WARN`/`DEBUG_INFO` → `DEBUG_ERROR` 是多對一，無法還原）
+
+支援預覽模式，建議第一次先按「預覽移除」確認範圍。
+
+---
+
+## 盤點命中數
+
+「**盤點命中數…**」算出每條規則在目前這棵 source 中會命中幾處。
+
+`old_code` 只保證在「產生 profile 當下的那份 source」中唯一；上游後來新增相似區塊時，同一條規則可能命中多處，而工具是整檔取代所有出現處——會安靜地把好幾個地方一起改掉，記錄只寫「已修改 N 處」。比對失敗至少會叫，這個不會。
+
+盤點結果可以直接寫成 `expect_count`：宣告後，命中數與宣告不符時該規則會報錯且不寫入。寫入前會備份 `profile.yaml`，改完立即讀回驗證，驗證不過就整個放棄。
+
+---
+
 ## 專案結構
 
 ```
@@ -150,19 +203,28 @@ changetodebug/
   appinfo.py                  版本、路徑解析（相容 PyInstaller）
   app.py                      argparse + QApplication
   core/
-    patcher.py                修補引擎（編碼偵測、換行保留、備份、dry-run）
+    patcher.py                修補引擎（編碼偵測、換行保留、備份、dry-run、3-way merge）
     profiles.py               profile 載入與自動偵測
     profilegen.py             從 ORG/MOD 自動產生 profile
     verifier.py               完成後重新讀檔驗證
     runner.py                 把選項與 task 串成一次執行
     settings.py               最近路徑 / 選項 / 主題保存
     logbus.py                 統一訊息輸出
+    gitinfo.py                比對專案版本與 profile 產生基準的差距
+    diagnose.py               比對失敗時指出最相似區塊與差異
+    basesnap.py               base 快照（改動前的原始檔）讀寫與擷取
+    threeway.py               三方合併（diff3）
+    conflicts.py              合併衝突的產物與解決流程
+    reanchor.py               解完衝突後把結果寫回 profile（重新錨定）
+    audit.py                  命中數盤點與 expect_count 建議
     tasks/                    功能實作（新增功能只要在此註冊）
       base.py  patchset.py  driver_debug.py  outp_marker.py
   gui/
-    main_window.py  pages.py  theme.py  worker.py  profilegen_dialog.py
+    main_window.py  pages.py  theme.py  worker.py
+    profilegen_dialog.py  audit_dialog.py
 profiles/
-  FY25.yaml  FY26.yaml  FY27.yaml  _TEMPLATE.yaml.example
+  FY25/  FY26/  FY27/        目錄型 profile（profile.yaml + base/ + base_manifest.yaml）
+  _TEMPLATE.yaml.example
 ```
 
 ### 已內建的世代
@@ -193,5 +255,5 @@ FY27 與前兩代性質不同，套用後還有兩件工具不會做的事：新
 `ChangeToDebug_Controller.py`、`Ui_ChangeToDebug_*.py`、`ChangeToDebug_*.ui`、
 `Debug/`（`DebugMode_Modify.py`、`OutpMarkerGen.py`、`modifications_FY2*.yaml`、舊 log 與設定）
 
-`profiles\FY25.yaml` / `FY26.yaml` 的修改內容與原本 `Debug\modifications_FY25.yaml` / `FY26.yaml`
-**位元組完全相同**，只是多了最上面的 `profile:` 區塊。
+FY25 / FY26 的修改內容（現在位於 `profiles\FY25\profile.yaml` / `FY26\profile.yaml`）與原本
+`Debug\modifications_FY25.yaml` / `FY26.yaml` **位元組完全相同**，只是多了最上面的 `profile:` 區塊。

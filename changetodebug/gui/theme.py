@@ -259,6 +259,17 @@ QTableWidget {{
     selection-background-color: {c['chip_bg']};
     selection-color: {c['text']};
 }}
+/* 欄位縮短後，最後一欄右邊會露出 header 容器本身；
+   只設 ::section 的話那塊空白會落回 Qt 預設白底，深色主題下非常刺眼。 */
+QHeaderView {{
+    background: {c['surface_alt']};
+    border: none;
+}}
+QTableCornerButton::section {{
+    background: {c['surface_alt']};
+    border: none;
+    border-bottom: 1px solid {c['border']};
+}}
 QHeaderView::section {{
     background: {c['surface_alt']};
     color: {c['subtext']};
@@ -266,6 +277,44 @@ QHeaderView::section {{
     border-bottom: 1px solid {c['border']};
     padding: 6px 8px;
     font-weight: 600;
+}}
+/* 欄位之間畫一條分隔線，讓「可以拖曳調整寬度」看得出來 */
+QHeaderView::section:horizontal {{
+    border-right: 1px solid {c['border']};
+}}
+QHeaderView::section:horizontal:hover {{
+    background: {c['chip_bg']};
+    color: {c['text']};
+}}
+
+/* ---- 清單（專案勾選等） ---- */
+QListWidget {{
+    background: {c['surface']};
+    alternate-background-color: {c['surface_alt']};
+    border: 1px solid {c['border']};
+    border-radius: 6px;
+    color: {c['text']};
+    padding: 2px;
+    outline: none;
+}}
+QListWidget::item {{
+    padding: 3px 4px;
+    border-radius: 4px;
+    color: {c['text']};
+}}
+QListWidget::item:hover {{
+    background: {c['surface_alt']};
+}}
+QListWidget::item:selected {{
+    background: {c['chip_bg']};
+    color: {c['text']};
+}}
+QListWidget:disabled {{
+    background: {c['surface_alt']};
+    color: {c['disabled']};
+}}
+QListWidget::item:disabled {{
+    color: {c['disabled']};
 }}
 
 /* ---- 進度條 ---- */

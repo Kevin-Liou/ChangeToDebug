@@ -84,7 +84,15 @@ profile:
 # new_code           取代後的內容
 # option_debug_flag  true  = 選配，只有勾選「啟用所有 Debug Flag」才套用
 #                    false = 必要，永遠套用（預設值）
+# expect_count       宣告這條規則在單一檔案中應該命中幾處（選填，預設不檢查）。
+#                    old_code 只保證在「產生 profile 當下的那份 source」中唯一；上游後來
+#                    新增相似區塊時可能變成命中多處，工具會安靜地全部取代。填了這欄，
+#                    命中數不符就報錯且不寫入。
 # regex              true 時 old_code 視為正規表示式、new_code 可用 \1 回填（選填）
+# regex_applied_check  regex 規則專用：套用後應該命中的樣式（選填）。
+#                    regex 的 new_code 含 \1 回填時無法比對字面值，沒有這一條的話
+#                    重跑會把「已經套用過」誤報成「找不到片段」。
+#                    例：old_code: '(PcdXxx\s*\|\s*)FALSE' → regex_applied_check: 'PcdXxx\s*\|\s*TRUE'
 # label              GUI 清單顯示名稱（選填，預設顯示 sub_path）
 # note               備註，會顯示成滑鼠提示（選填）
 #
