@@ -1,0 +1,39 @@
+#
+# (c) Copyright 2012 - 2025 HP Development Company, L.P.
+# This software and associated documentation (if any) is furnished under a license and may only be used or
+# copied in accordance with the terms of the license. Except as permitted by such license, no part of this
+# software or documentation may be reproduced, stored in a retrieval system, or transmitted in any
+# form or by any means without the express written consent of HP Development Company.
+#
+
+[Defines]
+   INF_VERSION                    = 0x00010005
+   BASE_NAME                      = ExpansionSlotLib
+   FILE_GUID                      = 878023D0-5FBF-4D4E-B585-31A4D4160D42
+   MODULE_TYPE                    = BASE
+   VERSION_STRING                 = 1.0
+   LIBRARY_CLASS                  = ExpansionSlotLib
+
+[Sources]
+   ExpansionSlots.c
+
+[Packages]
+   MdePkg/MdePkg.dec
+   $(HP_SETUP_PUB_INT_PKG_DEC)
+   $(HP_SIO_PACKAGE_DEC)
+   $(HP_PLATFORM_ABSTRACTION_PUB_INT_PKG_DEC)
+   HpIntelChipsetPkg/HpIntelChipsetPkg.dec
+   $(SYSTEM_OPTIONS_PUB_INT_PKG_DEC)   
+   HpPlatformPkg/HpPlatformPkg.dec
+   $(HP_FEATURE_MISC_PUB_INT_PKG_DEC)
+   $(PLATFORM_SI_PACKAGE_DEC)
+
+[LibraryClasses]
+   HpGpioLib
+   PcdLib
+
+[Guids]
+
+[Pcd]
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdHpPlatformID
+   gEfiSioTokenSpaceGuid.PcdDtPcaId

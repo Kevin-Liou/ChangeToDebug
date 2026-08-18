@@ -2,6 +2,7 @@
 
 import html
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -50,12 +51,29 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle(f"{APP_TITLE}  v{APP_VERSION}")
         self.setMinimumSize(980, 660)
-        self.resize(1120, 880)
+        self.resize(*self._default_size())
 
         self._build_ui()
         self._apply_theme(self.theme_name)
         self._load_settings()
         self.reload_profiles(quiet=True)
+
+    @staticmethod
+    def _default_size():
+        """依螢幕可用區域決定預設視窗大小。
+
+        原本寫死 1120x880，在一般螢幕上規則表格只看得到兩三列、執行記錄只剩幾行，
+        載入時的警告很容易一開始就被捲出畫面。改成依螢幕比例決定，並設上下限：
+        小螢幕不會超出可用區域，大螢幕也不會只開一小塊。
+        """
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            return 1400, 1000
+        area = screen.availableGeometry()
+        width = max(1120, min(1600, int(area.width() * 0.80)))
+        height = max(800, min(1100, int(area.height() * 0.90)))
+        # 小螢幕上下限可能反而超出可用區域，最後再夾一次
+        return min(width, area.width()), min(height, area.height())
 
     # ================================================================ UI
 
@@ -90,7 +108,7 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self._build_log_group())
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
-        splitter.setSizes([600, 260])
+        splitter.setSizes([620, 400])
         outer.addWidget(splitter, 1)
 
         outer.addWidget(self._build_action_bar())
@@ -233,7 +251,7 @@ class MainWindow(QMainWindow):
         group = QGroupBox("2　功能（可同時勾選多項，會依分頁順序執行）")
         layout = QVBoxLayout(group)
         self.tabs = QTabWidget()
-        self.tabs.setMinimumHeight(330)
+        self.tabs.setMinimumHeight(380)
         self.pages = []
         for page_cls in PAGE_CLASSES:
             page = page_cls()
@@ -264,6 +282,11 @@ class MainWindow(QMainWindow):
         open_log_btn = QPushButton("開啟 log 檔")
         open_log_btn.clicked.connect(self._open_log_file)
         bar.addWidget(open_log_btn)
+
+        self.backup_btn = QPushButton("清理備份…")
+        self.backup_btn.setToolTip("列出各次執行留下的 .bak.<時間戳> 備份，挑選要刪除的")
+        self.backup_btn.clicked.connect(self._open_backups)
+        bar.addWidget(self.backup_btn)
 
         self.resolve_btn = QPushButton("解決衝突…")
         self.resolve_btn.setToolTip("用合併工具處理上次執行留下的合併衝突")
@@ -392,6 +415,37 @@ class MainWindow(QMainWindow):
                              f"{item['ignored']}\n"
                              f"　實際使用的是：{item['used']}\n"
                              f"　要同時使用請改掉其中一個的 key，或在檔名前加底線停用。")
+        # 兩個 profile 的偵測條件一樣時，自動偵測只會選 priority 小的那個，
+        # 另一個等於形同虛設——使用者卻不會知道自己用到的是哪一份。
+        by_detect = {}
+        for profile in self.profiles:
+            signature = profile.detect_signature()
+            if signature:
+                by_detect.setdefault(signature, []).append(profile)
+        for group in by_detect.values():
+            if len(group) < 2:
+                continue
+            group = sorted(group, key=lambda p: (p.priority, p.key))
+            winner = group[0]
+            others = "、".join(f"{p.key}(priority {p.priority})" for p in group[1:])
+            self._append_log(
+                "warn",
+                f"以下世代的偵測條件完全相同：{'、'.join(p.key for p in group)}\n"
+                f"　偵測依據：{winner.detect_hint()}\n"
+                f"　自動偵測只會選 priority 最小的 {winner.key}（priority "
+                f"{winner.priority}），{others} 需要手動指定才會用到。\n"
+                "　要改變優先順序請調整 profile 的 priority，數字小者先比對。")
+
+        # new_files_dir 常常指向外部的 code change 套件，套件被改名或搬走就整批失效
+        for profile in self.profiles:
+            source = profile.new_files_dir
+            if profile.new_file_rules and source and not os.path.isdir(source):
+                self._append_log(
+                    "warn",
+                    f"{profile.key} 的新增檔案來源目錄不存在，"
+                    f"{len(profile.new_file_rules)} 條新增檔案規則無法套用：\n"
+                    f"　{source}")
+
         for profile in self.profiles:
             dead = profile.dead_rules()
             if dead:
@@ -663,11 +717,15 @@ class MainWindow(QMainWindow):
             return
 
         command = self.settings.get("merge_tool_command", "code")
+        # VS Code / Cursor 的 code 是 .cmd 批次檔，而 Windows 的 CreateProcess 不會套用
+        # PATHEXT——直接用裸名會得到 WinError 2。which() 解析出含副檔名的完整路徑就啟動
+        # 得起來；解析不到時沿用原字串，讓設定成絕對路徑的情況仍然可用。
+        resolved = shutil.which(command) or command
         launched, failed = [], []
         for record in records:
             try:
                 subprocess.Popen(
-                    [command, "--merge", record.current, record.profile,
+                    [resolved, "--merge", record.current, record.profile,
                      record.base, record.merged],
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
                 launched.append(record)
@@ -766,6 +824,33 @@ class MainWindow(QMainWindow):
             f"已更新 {done} 條規則" + (f"，{len(failed)} 條失敗" if failed else "") +
             "\n\nprofile 與 base 快照的舊版本已備份在同一個資料夾（.bak.<時間戳>）。")
         self.reload_profiles(quiet=False)
+
+    def _open_backups(self, preselect=""):
+        """列出專案裡的備份檔並讓使用者挑選刪除。"""
+        from ..core.backups import scan
+        from .backup_dialog import BackupDialog
+
+        base = self.path_combo.currentText().strip()
+        if not base or not os.path.isdir(base):
+            QMessageBox.warning(self, APP_NAME, "請先選擇有效的專案根目錄。")
+            return
+
+        logger = Logger(sink=self._append_log, log_file=self.log_path,
+                        echo_stdout=False)
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            groups = scan(base, logger)
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        if not groups:
+            QMessageBox.information(self, APP_NAME, "這個專案底下沒有備份檔。")
+            return
+
+        dialog = BackupDialog(groups, logger, self,
+                              stylesheet=build_stylesheet(self.theme_name),
+                              preselect=preselect if isinstance(preselect, str) else "")
+        dialog.exec_()
 
     def _open_profile_dir(self):
         target = user_profile_dir()
@@ -911,6 +996,7 @@ class MainWindow(QMainWindow):
 
     def _launch(self, request, base):
         """把一個 RunRequest 交給背景執行緒，並切換介面狀態。"""
+        self._last_was_revert = bool(getattr(request, "revert", False))
         self.settings.push_recent_path(base)
         self._save_settings()
         self._refresh_recent_combo(base)
@@ -1042,6 +1128,33 @@ class MainWindow(QMainWindow):
         else:
             self._append_log("ok", "處理完成。")
             QMessageBox.information(self, APP_NAME, f"處理完成。\n\n{text}")
+        # 不論這次結果落在哪個分支都要問——移除通常都會伴隨一些「找不到片段」，
+        # 只在「完全沒有失敗」時才問的話，實務上等於永遠不會出現。
+        self._offer_backup_cleanup(summary)
+
+    def _offer_backup_cleanup(self, summary):
+        """「移除 Change」跑完後，主動問要不要清掉備份檔。
+
+        移除的用意就是讓樹回到乾淨狀態，但還原本身也是寫入、也會產生備份，
+        不清的話 .bak 只會越積越多，而且全部掛在 BIOS repo 的 git status 上。
+        """
+        if not getattr(self, "_last_was_revert", False):
+            return
+        if not summary.backup_count:
+            return
+
+        box = QMessageBox(
+            QMessageBox.Information, APP_NAME,
+            f"移除完成，但這次還原又建立了 {summary.backup_count} 個備份檔"
+            f"（.bak.{summary.run_stamp}）。\n\n"
+            "修改已經還原，這些備份留在 BIOS source 裡會一直出現在 git status。\n"
+            "要現在清理嗎？（對話框會列出所有次數的備份，可一併選取）",
+            parent=self)
+        clean_btn = box.addButton("清理備份…", QMessageBox.AcceptRole)
+        box.addButton("先留著", QMessageBox.RejectRole)
+        box.exec_()
+        if box.clickedButton() is clean_btn:
+            self._open_backups(preselect=summary.run_stamp)
 
     def _on_failed(self, message):
         self.progress.setRange(0, 100)

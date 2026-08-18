@@ -36,62 +36,24 @@
 #include <Library/HpStorageBootOrderLib.h>
 #include <PlatformDefinitions.h>
 #include <Library/PcdLib.h>
+#include <HpGfxMiscSetup.h>
+#include <Library/HpGetVariableLib.h>
 #include <Library/PciSegmentLib.h>
 #include <IndustryStandard/Pci.h>
-#include <Library/HpGpioLib.h>
-#include <GpioV2Pad.h>
-#include <Nvl/Pch/GpioV2PinsNvlPchS.h>
-#include <HpPlatformId.h>
 
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Local Macro Definitions
 // ---------------------------------------------------------------------------------------------------------------------
-//
-// Every M.2 SSD of this platform hangs on the NVL-S CPU PCIe controller B (Bus 0 / Device 6):
-//
-//   M.2 SSD 1 (J39)          - Flex I/O lane B8~B11  - physical root port 5
-//   M.2 SSD 2 (J40)          - Flex I/O lane B12~B15 - physical root port 6
-//   M.2 SSD 3 (option card)  - Flex I/O lane B0~B7   - physical root port 3, shared with the dGPU option card
-//
-// Per the NVL-S EDS ("Supported PCI Express Link Configurations", note 1), the lowest active root
-// port of a Device (BDF) grouping is always re-assigned to function 0 and the remaining active root
-// ports keep their mapped function number, so the function number of a slot depends on what else is
-// populated or enabled:
-//
-//                       no dGPU / no 3rd SSD   no dGPU / 3rd SSD   dGPU / no 3rd SSD
-//   dGPU        (RP3)   -                      -                   0/6/0
-//   M.2 SSD 3   (RP3)   -                      0/6/0               -
-//   M.2 SSD 1   (RP5)   0/6/0                  0/6/4               0/6/4
-//   M.2 SSD 2   (RP6)   0/6/5                  0/6/5               0/6/5
-//
-// Disabling a slot in F10 removes its root port and shifts the remaining ones again, so a hard coded
-// device path can not describe this. UpdateM2SsdRootPortFunction () resolves the function number of
-// each slot from the root port Link Capabilities "Port Number" field, which is fixed by the board
-// routing and therefore identifies a slot no matter which functions happen to be active.
-//
 #define M2_SSD_ROOT_PORT_DEVICE     0x06
 #define M2_SSD1_ROOT_PORT_NUMBER    5       // Link Capabilities Port Number (1 based)
 #define M2_SSD2_ROOT_PORT_NUMBER    6
-#define M2_SSD3_ROOT_PORT_NUMBER    3
 #define M2_SSD1_PEG_TABLE_INDEX     3       // IntelM2NvmePegDp[3] - NVME_ON_PEG_M2_SLOT (3, ...)
 #define M2_SSD2_PEG_TABLE_INDEX     4       // IntelM2NvmePegDp[4] - NVME_ON_PEG_M2_SLOT (4, ...)
-#define M2_SSD3_PEG_TABLE_INDEX     2       // IntelM2NvmePegDp[2] - NVME_ON_PEG_M2_SLOT (2, ...)
-#define M2_SSD_NO_ROOT_PORT         0xFF    // Slot has no root port, its boot option never shows up
+#define M2_SSD_NO_ROOT_PORT         0xFF    // Slot has no root port, keep the place holder entry only
 
 #define R_PCIE_CFG_LCAP             0x4C    // Link Capabilities
 #define N_PCIE_CFG_LCAP_PN          24      // Link Capabilities Port Number field
-
-//
-// HPGP_GFX_ID[2:0] reports which option card is installed on the PCIe x16 slot.
-//
-#define HPGP_GFX_ID0                GPIOV2_NVL_PCH_S_GPP_B_7
-#define HPGP_GFX_ID1                GPIOV2_NVL_PCH_S_GPP_B_8
-#define HPGP_GFX_ID2                GPIOV2_NVL_PCH_S_GPP_B_9
-
-#define OPTION_CARD_NONE            0x00    // No option card
-#define OPTION_CARD_BOPPER          0x02    // RTX5050 50W GN22-X2 8GB - dGPU
-#define OPTION_CARD_BABBAGE         0x03    // 1x M.2 SSD Adapter      - M.2 SSD 3
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Local Structure Type Definitions
@@ -177,58 +139,32 @@ static HP_BOOT_ORDER_PLATFORM_INFO_NODE  DefaultUefiBootOrder[] =
 
   // NVME_ON_M2_SLOT(12, M2_SSD_STR, PCIESSD_PRIORITY)                      // HDD: "M2 SSD:" - PCIE port 12 (1D 04)
 
-  NVME_ON_PEG_M2_SLOT (3, M2_SSD1_STR, PCIESSD_PRIORITY)                 // HDD: "M.2 SSD 1:" - CPU PCIe root port 5 (Device 6) J39
-  NVME_ON_PEG_M2_SLOT (4, M2_SSD2_STR, PCIESSD_PRIORITY + 1)             // HDD: "M.2 SSD 2:" - CPU PCIe root port 6 (Device 6) J40
+  NVME_ON_PEG_M2_SLOT (3, M2_SSD1_STR, PCIESSD_PRIORITY)                 // HDD: "M.2 SSD 1:" - CPU PCIe root port 5 (Device 6)
+  NVME_ON_PEG_M2_SLOT (4, M2_SSD2_STR, PCIESSD_PRIORITY + 1)             // HDD: "M.2 SSD 2:" - CPU PCIe root port 6 (Device 6)
 
   // STORAGE_ON_PCIE_SLOT(0, PCIE_BY_4_1_STR, PCIESSD_PRIORITY+3)           // HDD: "PCI Express x4 Slot 1:" - PCIE port 0 (1C 00)
   NETWORK_GBE_UEFI(NETWORK_STR, NETWORK_PRIORITY)                           // NETWORK IPV4/IPV6: "NETWORK BOOT:" External LAN (1F 06)
   // EMMC_CONTROLLER(EMMC_STR, EMMC_PRIORITY)                               // HP_AED: "HP_AED:" - PCIE EMMC (1A 00)
 };
 
-static HP_BOOT_ORDER_PLATFORM_INFO_NODE  ThirdSsdUefiBootOrder[] =
+static HP_BOOT_ORDER_PLATFORM_INFO_NODE  UmaUefiBootOrder[] =
 {
-  // The function number of the M.2 SSD entries is resolved at runtime by UpdateM2SsdRootPortFunction ().
-  NVME_ON_PEG_M2_SLOT (3, M2_SSD1_STR, PCIESSD_PRIORITY)                 // HDD: "M.2 SSD 1:" - CPU PCIe root port 5 (Device 6) J39
-  NVME_ON_PEG_M2_SLOT (4, M2_SSD2_STR, PCIESSD_PRIORITY + 1)             // HDD: "M.2 SSD 2:" - CPU PCIe root port 6 (Device 6) J40
-  NVME_ON_PEG_M2_SLOT (2, M2_SSD3_STR, PCIESSD_PRIORITY + 2)             // HDD: "M.2 SSD 3:" - CPU PCIe root port 3 (Device 6) Babbage option card
-  
+  // HDD_ON_SATA_PORT(2, SATA2_STR, HDD_PRIORITY)                           // HDD: "SATA 2:" - Sata port 2
+  // HDD_ON_SATA_PORT(3, SATA1_STR, HDD_PRIORITY+3)                         // HDD: "SATA 1:" - Sata port 3
+
+  // HDD_AND_CD_ON_SATA_PORT(0, SATA0_STR, HDD_PRIORITY+2)                  // HDD/CDROM: "SATA 0:" - Sata port 0
+
+  // NVME_AND_AHCI_ON_M2_SLOT(8, 1, M2_SSD2_STR, PCIESSD_PRIORITY+1)        // HDD: "M2 SSD 2:" - PCIE port 8 (1D 00)/Sata port 1
+
+  // NVME_ON_M2_SLOT(12, M2_SSD_STR, PCIESSD_PRIORITY)                      // HDD: "M2 SSD:" - PCIE port 12 (1D 04)
+
+  NVME_ON_PEG_M2_SLOT (3, M2_SSD1_STR, PCIESSD_PRIORITY)                 // HDD: "M.2 SSD 1:" - CPU PCIe root port 5 (Device 6)
+  NVME_ON_PEG_M2_SLOT (4, M2_SSD2_STR, PCIESSD_PRIORITY + 1)             // HDD: "M.2 SSD 2:" - CPU PCIe root port 6 (Device 6)
+
+  // STORAGE_ON_PCIE_SLOT(0, PCIE_BY_4_1_STR, PCIESSD_PRIORITY+3)           // HDD: "PCI Express x4 Slot 1:" - PCIE port 0 (1C 00)
   NETWORK_GBE_UEFI(NETWORK_STR, NETWORK_PRIORITY)                           // NETWORK IPV4/IPV6: "NETWORK BOOT:" External LAN (1F 06)
+  // EMMC_CONTROLLER(EMMC_STR, EMMC_PRIORITY)                               // HP_AED: "HP_AED:" - PCIE EMMC (1A 00)
 };
-
-// ********************************************************************************************************************
-// Function:  IsThirdSsdCardInstalled
-//
-// Summary:
-//   Report whether the Babbage "1x M.2 SSD Adapter" option card is installed on the PCIe x16 slot.
-//   Only Manaan PG boards carry the option card connector, Manaan P and Manaan M do not.
-//
-//
-// Parameters:
-//   VOID
-//
-// Function Returns:  TRUE when the third M.2 SSD is present in the boot order, FALSE otherwise
-// ********************************************************************************************************************
-STATIC
-BOOLEAN
-IsThirdSsdCardInstalled (
-  VOID
-  )
-{
-  UINT8  OptionCardId;
-
-  if (PcdGet16 (PcdDtPcaId) != BOARD_ID_DM800_PG)
-  {
-    return FALSE;
-  }
-
-  OptionCardId = (UINT8)((HpGpioRead (HPGP_GFX_ID2) << 2) |
-                         (HpGpioRead (HPGP_GFX_ID1) << 1) |
-                         HpGpioRead (HPGP_GFX_ID0));
-
-  DEBUG ((BOOTORDER_ERR_LVL, "[IsThirdSsdCardInstalled] HPGP_GFX_ID[2:0] = %x \n", OptionCardId));
-
-  return (BOOLEAN)(OptionCardId == OPTION_CARD_BABBAGE);
-}
 
 // ********************************************************************************************************************
 // Function:  InstallPlatformDefaultData
@@ -250,24 +186,27 @@ InstallPlatformDefaultData (
   HP_BOOT_ORDER_PLATFORM_INFO_NODE  *PlatformUefiBootOrder      = NULL;
   UINTN                             PlatformUefiBootOrderCounts = 0;
   UINTN                             NodeIndex;
+  EFI_STATUS                        Status;
+  HP_GFX_MISC_VARIABLE              *HpGfxMiscVariable = NULL;
+  UINTN                             VarSize            = 0u;
 
   BOOTORDER_PRINT ((BOOTORDER_ERR_LVL, "[InstallPlatformDefaultData] Entry \n"));
 
   if (mUefiListHead != NULL)
   {
     //
-    // The dGPU option cards do not add any boot device, so they keep the default table. Only the
-    // Babbage option card needs the extra "M.2 SSD 3" entry.
+    // Projects can assign different table by PcdDGpuHwPresent and HybridGraphicsEnable here
     //
-    if (IsThirdSsdCardInstalled ())
-    {
-      PlatformUefiBootOrderCounts = NUM_ELEMENTS (ThirdSsdUefiBootOrder);
-      PlatformUefiBootOrder       = AllocateCopyPool (PlatformUefiBootOrderCounts * sizeof (HP_BOOT_ORDER_PLATFORM_INFO_NODE), ThirdSsdUefiBootOrder);
-    }
-    else
+    Status = HpGetVariable2 (HP_GFX_MISC_VARIABLE_NAME, &gHpVariableGuid, (VOID **)&HpGfxMiscVariable, &VarSize);
+    if ((Status == EFI_SUCCESS) && (HpGfxMiscVariable->HybridGraphicsEnable) && (PcdGetBool (PcdDGpuHwPresent)))
     {
       PlatformUefiBootOrderCounts = NUM_ELEMENTS (DefaultUefiBootOrder);
       PlatformUefiBootOrder       = AllocateCopyPool (PlatformUefiBootOrderCounts * sizeof (HP_BOOT_ORDER_PLATFORM_INFO_NODE), DefaultUefiBootOrder);
+    }
+    else
+    {
+      PlatformUefiBootOrderCounts = NUM_ELEMENTS (UmaUefiBootOrder);
+      PlatformUefiBootOrder       = AllocateCopyPool (PlatformUefiBootOrderCounts * sizeof (HP_BOOT_ORDER_PLATFORM_INFO_NODE), UmaUefiBootOrder);
     }
 
     if (PlatformUefiBootOrder != NULL)
@@ -315,7 +254,6 @@ UpdateM2SsdRootPortFunction (
   UINTN   PortNumber;
   UINT8   Ssd1Function = M2_SSD_NO_ROOT_PORT;
   UINT8   Ssd2Function = M2_SSD_NO_ROOT_PORT;
-  UINT8   Ssd3Function = M2_SSD_NO_ROOT_PORT;
 
   for (RpFunction = 0; RpFunction <= PCI_MAX_FUNC; RpFunction++)
   {
@@ -338,34 +276,12 @@ UpdateM2SsdRootPortFunction (
     {
       Ssd2Function = (UINT8)RpFunction;
     }
-    else if (PortNumber == M2_SSD3_ROOT_PORT_NUMBER)
-    {
-      Ssd3Function = (UINT8)RpFunction;
-    }
   }
 
   IntelM2NvmePegDp[M2_SSD1_PEG_TABLE_INDEX].PciDevice.Function = Ssd1Function;
   IntelM2NvmePegDp[M2_SSD2_PEG_TABLE_INDEX].PciDevice.Function = Ssd2Function;
 
-  //
-  // IntelM2NvmePegDp[2] describes a PEG port on Device 1, so the M.2 SSD 3 entry needs its device
-  // number corrected as well. Root port 3 also hosts the dGPU option cards, but a dGPU is not an
-  // NVMe device and the M.2 SSD 3 entry is only in the boot order when the Babbage card is installed,
-  // so it can never be matched against a graphics card.
-  //
-  IntelM2NvmePegDp[M2_SSD3_PEG_TABLE_INDEX].PciDevice.Device   = M2_SSD_ROOT_PORT_DEVICE;
-  IntelM2NvmePegDp[M2_SSD3_PEG_TABLE_INDEX].PciDevice.Function = Ssd3Function;
-
-  DEBUG ((
-    BOOTORDER_ERR_LVL,
-    "[UpdateM2SsdRootPortFunction] M.2 SSD 1 = 0/%x/%x, M.2 SSD 2 = 0/%x/%x, M.2 SSD 3 = 0/%x/%x \n",
-    M2_SSD_ROOT_PORT_DEVICE,
-    Ssd1Function,
-    M2_SSD_ROOT_PORT_DEVICE,
-    Ssd2Function,
-    M2_SSD_ROOT_PORT_DEVICE,
-    Ssd3Function
-    ));
+  DEBUG ((BOOTORDER_ERR_LVL, "[UpdateM2SsdRootPortFunction] M.2 SSD 1 = 0/%x/%x, M.2 SSD 2 = 0/%x/%x \n", M2_SSD_ROOT_PORT_DEVICE, Ssd1Function, M2_SSD_ROOT_PORT_DEVICE, Ssd2Function));
 }
 
 // Update Platform Specific Data

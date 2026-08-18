@@ -230,7 +230,19 @@ class PatchSetTask(Task):
                 continue
             jobs.append((base / rule.sub_path.replace("\\", "/"), rule))
         if profile.new_file_rules:
-            logger.info(f"新增檔案來源：{profile.new_files_dir or '(未設定)'}")
+            source = profile.new_files_dir
+            if not source:
+                logger.error(f"有 {len(profile.new_file_rules)} 條新增檔案規則，"
+                             "但 profile 沒有設定 new_files_dir，全部無法複製。")
+            elif not os.path.isdir(source):
+                # 指向外部 code change 套件時，套件被改名或搬走就會整批失效。
+                # 不先講的話，使用者只會看到 N 個「來源檔不存在」，不知道是同一個原因。
+                logger.error(f"新增檔案的來源目錄不存在，{len(profile.new_file_rules)} 條"
+                             "新增檔案規則全部無法複製：")
+                logger.error(f"    {source}")
+                logger.error("    請修正 profile 的 new_files_dir，或改用指向現有套件的 profile。")
+            else:
+                logger.info(f"新增檔案來源：{source}")
 
         # 1) sub_path 型：一條規則對一個檔案
         for rule in profile.rules:

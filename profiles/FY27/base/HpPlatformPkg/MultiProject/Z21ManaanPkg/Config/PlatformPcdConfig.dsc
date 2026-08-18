@@ -20,6 +20,7 @@
   DEFINE PROJECT_SMBIOS_VERSION  = 0x0304  # SMBIOS 3.4
   DEFINE PROJECT_FAN_TABLE_COUNT = 6  # MULTI_FAN_TABLE_COUNTS
   DEFINE PROJECT_ACPI_OEM_TABLE_ID = 0x20202020204C564E  # PcdAcpiDefaultOemTableId, "NVL     "
+  DEFINE HP_CMOS_BUTTON_SUPPORT = TRUE
 
 [PcdsFeatureFlag]
 
@@ -60,7 +61,7 @@
   gPlatformModuleTokenSpaceGuid.PcdEbcEnable|TRUE
   gPlatformModuleTokenSpaceGuid.PcdHddPasswordEnable|FALSE
   gPlatformModuleTokenSpaceGuid.PcdNetworkEnable|TRUE
-  gPlatformModuleTokenSpaceGuid.PcdMouseEnable|TRUE
+  gPlatformModuleTokenSpaceGuid.PcdMouseEnable|FALSE
 
   gPlatformModuleTokenSpaceGuid.PcdScsiEnable|TRUE
   gPlatformModuleTokenSpaceGuid.PcdJpgEnable|TRUE
@@ -182,14 +183,14 @@
    gHpDtPkgTokenSpaceGuid.OptCardFlexIoSmbSelGpioPinActive|0
 
    # VPIN Selection Pins
-   gHpDtPkgTokenSpaceGuid.VpinSelect1GpioPin|0x001C048C            # GPIOV2_NVL_PCH_S_GPP_E_12  HPGP_IMON_65W
-   gHpDtPkgTokenSpaceGuid.VpinSelect2GpioPin|0x001C048D            # GPIOV2_NVL_PCH_S_GPP_E_13  HPGP_IMON_90W
-   gHpDtPkgTokenSpaceGuid.VpinSelect3GpioPin|0x001C048F            # GPIOV2_NVL_PCH_S_GPP_E_15  HPGP_IMON_100W
-   gHpDtPkgTokenSpaceGuid.VpinSelect4GpioPin|0x001C0490            # GPIOV2_NVL_PCH_S_GPP_E_16  HPGP_IMON_120W
-   gHpDtPkgTokenSpaceGuid.VpinSelect5GpioPin|0x001C0491            # GPIOV2_NVL_PCH_S_GPP_E_17  HPGP_IMON_150W
-   gHpDtPkgTokenSpaceGuid.VpinSelect6GpioPin|0x001C0492            # GPIOV2_NVL_PCH_S_GPP_E_18  HPGP_IMON_180W
-   gHpDtPkgTokenSpaceGuid.VpinSelect7GpioPin|0x001C0493            # GPIOV2_NVL_PCH_S_GPP_E_19  HPGP_IMON_230W
-   gHpDtPkgTokenSpaceGuid.VpinSelect8GpioPin|0x001C0494            # GPIOV2_NVL_PCH_S_GPP_E_20  HPGP_IMON_Reserved
+   gHpDtPkgTokenSpaceGuid.VpinSelect1GpioPin|0x001E108C            # GPIOV2_NVL_PCH_S_GPP_E_12  HPGP_IMON_65W
+   gHpDtPkgTokenSpaceGuid.VpinSelect2GpioPin|0x001E108D            # GPIOV2_NVL_PCH_S_GPP_E_13  HPGP_IMON_90W
+   gHpDtPkgTokenSpaceGuid.VpinSelect3GpioPin|0x001E108F            # GPIOV2_NVL_PCH_S_GPP_E_15  HPGP_IMON_100W
+   gHpDtPkgTokenSpaceGuid.VpinSelect4GpioPin|0x001E1090            # GPIOV2_NVL_PCH_S_GPP_E_16  HPGP_IMON_120W
+   gHpDtPkgTokenSpaceGuid.VpinSelect5GpioPin|0x001E1091            # GPIOV2_NVL_PCH_S_GPP_E_17  HPGP_IMON_150W
+   gHpDtPkgTokenSpaceGuid.VpinSelect6GpioPin|0x001E1092            # GPIOV2_NVL_PCH_S_GPP_E_18  HPGP_IMON_180W
+   gHpDtPkgTokenSpaceGuid.VpinSelect7GpioPin|0x001E1093            # GPIOV2_NVL_PCH_S_GPP_E_19  HPGP_IMON_230W
+   gHpDtPkgTokenSpaceGuid.VpinSelect8GpioPin|0x001E1094            # GPIOV2_NVL_PCH_S_GPP_E_20  HPGP_IMON_Reserved
 
 [PcdsFixedAtBuild.IA32]
    gIntelSiliconPkgTokenSpaceGuid.PcdVTdPeiDmaBufferSize|0x02400000

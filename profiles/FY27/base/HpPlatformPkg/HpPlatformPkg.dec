@@ -98,7 +98,7 @@
    gEfiHpPlatformPkgTokenSpaceGuid.PcdAcPresentGpio|0xFFFFFFFF|UINT32|0x0000002A
    gEfiHpPlatformPkgTokenSpaceGuid.PcdAcPresentGpioActive|1|UINT8|0x0000002B
 
-# G11 Display Feature requirment +++
+# G3i Display Feature requirment +++
    #
    # FFS filename to find the Intel VBT file (Enable DMRRS).
    #
@@ -174,12 +174,17 @@
    #
    gEfiHpPlatformPkgTokenSpaceGuid.PcdIntelVbtFileGuid_PSR_REPLAY_VRR_DRR|{0xa5, 0x7d, 0xa9, 0x23, 0xa2, 0x43, 0x2e, 0x46, 0xa8, 0xc4, 0xc2, 0x34, 0x4f, 0xe2, 0x34, 0x0c}|VOID*|0x00000046
 
-# G11 Display Feature requirment ---
+   #
+   # FFS filename to find the Intel VBT file (OLED, Enable DMRRS, PSR, VRR).
+   #
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdIntelVbtFileGuid_OLED_DMRRS_PSR_VRR|{0x10, 0xf7, 0x2a, 0x1c, 0xb7, 0x40, 0x24, 0x46, 0x0f, 0x18, 0x17, 0xde, 0x81, 0x71, 0x72, 0x69 }|VOID*|0x00000047
 
-   ## HP Series identifier for multi-project build (CRB=0, DT800=80, DM800=8, AIO800=81, DM400=4, AIO400=41, NB800=800, NB1000=1000)
+# G3i Display Feature requirment ---
+
+   ## HP Series identifier for multi-project build (CRB=0, DT800=80, DM800=8, AIO800=81, DM400=4, AIO600=61, NB800=800, NB1000=1000)
    gEfiHpPlatformPkgTokenSpaceGuid.PcdHpSeries|0|UINT16|0x00000034
 
-   ## HP Project index for multi-project build (CRB=0, Z_01=1, Z_11=11, Z_13=13, Z_21=21, Z_22=22, Z_70=70, Z_90=90, Z_97=97)
+   ## HP Project index for multi-project build (CRB=0, Z_01=1, Z_11=11, Z_12=12, Z_21=21, Z_22=22, Z_70=70, Z_90=90, Z_97=97)
    gEfiHpPlatformPkgTokenSpaceGuid.PcdHpProjectIndex|0|UINT8|0x00000035
 
    #
@@ -219,6 +224,7 @@
    gEfiHpPlatformPkgTokenSpaceGuid.PcdAudioSsid|0xFFFF|UINT16|0x30000006 # PCD for HDA controller and verb codec programming
    gEfiHpPlatformPkgTokenSpaceGuid.PcdIsMudWorkstationProductFamily|FALSE|BOOLEAN|0x30000007
    gEfiHpPlatformPkgTokenSpaceGuid.PcdColorAlsHwPresent|FALSE|BOOLEAN|0x30000008
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdAccelHwPresent|FALSE|BOOLEAN|0x3000000E
    gEfiHpPlatformPkgTokenSpaceGuid.PcdMemoryDownId|0x00000000|UINT32|0x30000009
    gEfiHpPlatformPkgTokenSpaceGuid.PcdPlatformIshEnable|0|UINT8|0x3000000A
 

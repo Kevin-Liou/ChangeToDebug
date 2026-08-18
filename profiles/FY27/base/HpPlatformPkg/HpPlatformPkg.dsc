@@ -326,10 +326,10 @@
 [Components.$(PEI_ARCHITECTURE)]
   $(HP_PLATFORM_PACKAGE)/BiosUpdatePlatformPolicy/BiosUpdatePlatformPolicyPei.inf
   $(HP_PLATFORM_PACKAGE)/HpPlatformServices/Pei/HpPlatformPeiServices.inf
-  $(HP_PLATFORM_PACKAGE)/PlatformMud/Pei/PlatformMudPei.inf
   $(HP_PLATFORM_PACKAGE)/HpSecureStorageDevicePei/HpSecureStorageDevicePei.inf
 !if $(HP_PLATFORM_TYPE) == Nb
   $(HP_EPSC_PACKAGE)/ThermalInitPei/ThermalInitPei.inf
+  $(HP_PLATFORM_PACKAGE)/PlatformMud/Pei/PlatformMudPei.inf
 !endif  
 !if $(CRB_BOOT_SUPPORT) == FALSE
 !if $(SURESTART_SUPPORT) == FALSE
@@ -422,8 +422,6 @@
   }
 !endif
   $(HP_PLATFORM_PACKAGE)/HpPlatformFeaturesDxe/HpPlatformFeaturesDxe.inf
-  $(HP_PLATFORM_PACKAGE)/PlatformMud/Dxe/PlatformMudDxe.inf
-  $(HP_PLATFORM_PACKAGE)/PlatformMud/Smm/PlatformMudSmm.inf
   $(HP_PLATFORM_PACKAGE)/HpPlatformServices/Dxe/HpPlatformDxeServices.inf
   $(HP_PLATFORM_PACKAGE)/HpPlatformServices/Smm/HpPlatformSmmServices.inf
   $(HP_PLATFORM_PACKAGE)/HpSecureStorageDeviceDxe/HpSecureStorageDeviceDxe.inf
@@ -431,6 +429,8 @@
 !if $(HP_PLATFORM_TYPE) == Nb
   $(HP_PLATFORM_PACKAGE)/Hotkey/Hotkey.inf
   $(HP_PLATFORM_PACKAGE)/PlatformPrivateWmi/PlatformPrivateWmi.inf
+  $(HP_PLATFORM_PACKAGE)/PlatformMud/Dxe/PlatformMudDxe.inf
+  $(HP_PLATFORM_PACKAGE)/PlatformMud/Smm/PlatformMudSmm.inf
 !endif  
   $(HP_PLATFORM_PACKAGE)/BiosUpdatePlatformPolicy/BiosUpdatePlatformPolicySmm.inf
 !if $(CRB_BOOT_SUPPORT) == FALSE
@@ -503,6 +503,12 @@
   # default set to "NVL     ", will be patched by AcpiPlatform per CPU family.
   # MultiProject builds override this via their Config/PlatformPcdConfig.dsc.
   gEfiMdeModulePkgTokenSpaceGuid.PcdAcpiDefaultOemTableId|0x20202020204C564E     # PcdAcpiDefaultOemTableId, "NVL     "
+
+  #
+  # IPv4 and IPv6 HTTP Boot support.
+  #
+  gEfiNetworkPkgTokenSpaceGuid.PcdIPv4HttpSupport|FALSE
+  gEfiNetworkPkgTokenSpaceGuid.PcdIPv6HttpSupport|FALSE
 
 [PcdsDynamicHii.X64.DEFAULT]
   #

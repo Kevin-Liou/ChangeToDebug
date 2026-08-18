@@ -124,6 +124,15 @@ class Profile:
         """是否帶有 base 快照（階段 4 的 3-way merge 需要）。"""
         return self.base_snapshot is not None and self.base_snapshot.available
 
+    def detect_signature(self):
+        """偵測條件的正規化形式，用來判斷兩個 profile 會不會搶同一棵樹。"""
+        parts = []
+        for cond in list(self.detect_any) + list(self.detect_all):
+            if isinstance(cond, dict):
+                for kind, value in cond.items():
+                    parts.append(f"{kind}:{str(value).replace(chr(92), '/').strip('/')}")
+        return tuple(sorted(parts))
+
     def dead_rules(self):
         """old_code 與 new_code 相同的規則——這種規則套用了也不會有任何改變。
 

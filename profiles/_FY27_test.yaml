@@ -1,9 +1,9 @@
 # ==========================================================
-# FY27 (Nova Lake) 專案世代設定
+# FY27 (test) 專案世代設定
 #
 # 由 ChangeToDebug 的「產生 Profile」功能從 ORG / MOD 自動產生。
-#   ORG：E:\SynologyDrive\01_Work\01_Projects\DM_G14_G3i\CodeChange\2026-08-18_Release_build_show_BIOS_and_ACPI_and_POST_debug_Message\ORG
-#   MOD：E:\SynologyDrive\01_Work\01_Projects\DM_G14_G3i\CodeChange\2026-08-18_Release_build_show_BIOS_and_ACPI_and_POST_debug_Message\MOD
+#   ORG：E:\SynologyDrive\01_Work\01_Projects\DM_G14_G3i\CodeChange\Release_build_show_BIOS_and_ACPI_and_POST_debug_Message\ORG
+#   MOD：E:\SynologyDrive\01_Work\01_Projects\DM_G14_G3i\CodeChange\Release_build_show_BIOS_and_ACPI_and_POST_debug_Message\MOD
 #
 # 產生出來的規則 option_debug_flag 一律是 false（必要）。
 # 請自行把「選配 / 只在深入偵錯時才需要」的項目改成 true。
@@ -11,19 +11,14 @@
 
 profile:
   key: FY27
-  display_name: FY27 (Nova Lake)
-  description: HP FY27 code － RELEASE build 輸出 BIOS/ACPI debug message
-  priority: 27
-
-  detect:
-    any:
-      - dir: .gitman/Intel/NovaLakeBoardPkg
+  display_name: 'FY27 (test)'
+  priority: 100
 
   pcd_scan_roots:
     - 'HpPlatformPkg/MultiProject'
 
   # 新增檔案的來源目錄（可改成相對於本 YAML 的路徑）
-  new_files_dir: 'E:/SynologyDrive/01_Work/01_Projects/DM_G14_G3i/CodeChange/2026-08-18_Release_build_show_BIOS_and_ACPI_and_POST_debug_Message/MOD'
+  new_files_dir: 'E:/SynologyDrive/01_Work/01_Projects/DM_G14_G3i/CodeChange/Release_build_show_BIOS_and_ACPI_and_POST_debug_Message/MOD'
 
 new_files:
   - path: 'HpPlatformPkg/AcpiTables/Dt/Dsdt/PchUart0Debugger.ASL'
@@ -183,6 +178,219 @@ modifications:
       [Depex]
         gEfiSmmBase2ProtocolGuid
 # ----------------------------------------------------------
+  - sub_path: 'HpPlatformPkg/MultiProject/Z21ManaanPkg/Config/HpFeature/HpFeatureMiscConfig.dsc'
+    label: 'HpFeatureMiscConfig.dsc'
+    option_debug_flag: false
+    old_code: |2-
+
+         gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable|FALSE
+      !if $(FSP_DEBUG_IN_RELEASE_MODE) == TRUE
+         gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable|TRUE
+      !endif
+    new_code: |2-
+
+         gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable|FALSE
+      !if $(FSP_DEBUG_IN_RELEASE_MODE) == TRUE
+         gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable|TRUE
+      !endif
+
+         #
+         # Activate the SIO debug UART in a RELEASE build. Both output paths need it - the ASL side
+         # writes IO 0x3F8 directly, so if the LDN was never activated its writes go nowhere just
+         # the same as the BIOS side's.
+         #
+         # SerialPortPlatformHookLib.c gates the Nuvoton SIO UART LDN on
+         #
+         #     #if DEBUG_MODE || FixedPcdGetBool (PcdHpPostCodeToSerialPortEnable)
+         #
+         # so either half of that is enough on its own. HP_DEBUG_LOG_BIOS defines DEBUG_MODE=1
+         # tree-wide (via DEBUG_BIOS_ENABLE -> BuildOptions.dsc -> *_*_*_CC_FLAGS), which satisfies
+         # the first half. This PCD is therefore forced ONLY for the ACPI-only combination, where
+         # DEBUG_MODE does not exist and the PCD is the sole thing keeping the UART alive. The !if
+         # above keys off FSP_DEBUG_IN_RELEASE_MODE, which envVariables.txt hardcodes to FALSE, so
+         # it never fires - hence forcing it here.
+         #
+         # Deliberately NOT forced when HP_DEBUG_LOG_BIOS is on. Upstream HpFeature DSCs read this
+         # PCD as "turn my debug output on", and when it is TRUE they hand their own modules a
+         # printing DebugLib, PcdDebugPrintErrorLevel|0x80080046 and -UMDEPKG_NDEBUG. That defeats
+         # the per-file opt-in HpForceDebugLib exists to provide - those modules print regardless of
+         # PROJECT_DEBUG_LEVEL. The three DSCs that do it:
+         #
+         #   BuiltInDeviceOptionsPubSrcPkgInf.dsc     BuiltInDeviceOptions Pei/Dxe/Smm
+         #   HpFeatureMiscPubSrcPkgInf.dsc            HpFeatureMisc Pei/Dxe/Smm
+         #   HpFeatureErrorHandlingPubSrcPkgInf.dsc   TceqAlertPei, CmosButtonLoadDefaultsPei
+         #
+         # Enabling the UART on its own was measured as harmless on this board: a RELEASE image with
+         # the UART active and no traffic boots normally.
+         #
+         # HP_DEBUG_LOG_POST is in the condition for the same reason as ACPI: it does not define
+         # DEBUG_MODE either (the POST code path gets its -UMDEPKG_NDEBUG from the module-scope
+         # block that HP_FEATURE_ERROR_HANDLING_DEBUG_MSG opens), so a POST-only build has nothing
+         # else to activate the UART with. A POST-only or ACPI-only build therefore carries the
+         # extra HpFeature module output listed above as a known cost; combining either with
+         # HP_DEBUG_LOG_BIOS avoids it, since DEBUG_MODE then covers the UART.
+         #
+      !if ($(HP_DEBUG_LOG_BIOS) == FALSE) AND (($(HP_DEBUG_LOG_ACPI) == TRUE) OR ($(HP_DEBUG_LOG_POST) == TRUE))
+         gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable|TRUE
+      !endif
+# ----------------------------------------------------------
+  - sub_path: 'HpPlatformPkg/MultiProject/Z21ManaanPkg/Config/PlatformPcdConfig.dsc'
+    label: 'PlatformPcdConfig.dsc'
+    option_debug_flag: false
+    old_code: |2+
+
+      #
+
+      [Defines]
+        DEFINE PROJECT_DEBUG_LEVEL = 0x80080046  # DEBUG_ERROR | DEBUG_EVENT | DEBUG_WARN | DEBUG_LOAD
+        DEFINE DBG_SERIAL_PORT_BASE     = 0x3F8
+        DEFINE SYSTEM_SIO_BASE_ADDRESS  = 0x260
+
+    new_code: |2+
+
+      #
+
+      [Defines]
+        #
+        # Global debug volume, once DEBUG_BIOS_ENABLE=TRUE has made DEBUG() live in RELEASE.
+        #
+        # This is a bitmask ANDed with each DEBUG()'s level, so the value below - 0 - silences
+        # every generic DEBUG() in the tree. That is deliberate. HpForceDebugLib has its own
+        # HP_FORCE_DEBUG_LEVEL and does not consult this PCD, so the files that opted in still
+        # print while everything else stays quiet. Keeping the volume down matters here: this
+        # board does not survive a full debug image.
+        #
+        #   0x00000000  opted-in files only          <- HP_DEBUG_LOG_POST = FALSE
+        #   0x00080000  + DEBUG_EVENT                <- HP_DEBUG_LOG_POST = TRUE
+        #   0x80000000  + DEBUG_ERROR everywhere     useful as a canary: if the HpFeature
+        #                                            ListFeatureSetting lines appear, the build
+        #                                            config and the UART are both fine and any
+        #                                            missing message is down to that one file
+        #   0x80080046  DEBUG_ERROR | DEBUG_EVENT | DEBUG_WARN | DEBUG_LOAD - the original value
+        #
+        # DEBUG_EVENT (0x00080000) is picked out on its own for HP_DEBUG_LOG_POST because the only
+        # DEBUG_EVENT call site in the tree that can reach a printing DebugLib is HpFeature's
+        # DebugPostCode.c - "POSTCODE=<%04X>", linked into RtsCallbackHandler Pei/Dxe/Smm. The one
+        # other user of that level, Intel's PeiSmbusLib, resolves to DebugLibNull. So raising the
+        # volume by this one bit adds the POST code trace and nothing else. See HP_DEBUG_LOG_POST
+        # in <Project>PkgConfig.dsc for the other half of the wiring.
+        #
+      !if $(HP_DEBUG_LOG_POST) == TRUE
+        DEFINE PROJECT_DEBUG_LEVEL = 0x00080000
+      !else
+        DEFINE PROJECT_DEBUG_LEVEL = 0x00000000
+      !endif
+        DEFINE DBG_SERIAL_PORT_BASE     = 0x3F8
+        DEFINE SYSTEM_SIO_BASE_ADDRESS  = 0x260
+
+# ----------------------------------------------------------
+  - sub_path: 'HpPlatformPkg/MultiProject/Z21ManaanPkg/Config/PlatformPcdConfig.dsc'
+    label: 'PlatformPcdConfig.dsc 修改 2'
+    option_debug_flag: false
+    old_code: |2
+
+      !endif
+
+          # PCD to enable Serial Debug in ACPI
+      !if $(HP_RTD3_ACPI_MEM_DEBUG_ENABLE) == TRUE
+         gHpIntelChipsetPkgTokenSpaceGuid.PcdSerialDebugInAcpiEnable|TRUE
+      !else
+         gHpIntelChipsetPkgTokenSpaceGuid.PcdSerialDebugInAcpiEnable|FALSE
+    new_code: |2
+
+      !endif
+
+          # PCD to enable Serial Debug in ACPI
+          #
+          # Driven by HP_DEBUG_LOG_ACPI in Z21ManaanPkgConfig.dsc. BuildOptions.dsc:47 reads this
+          # PCD and turns it into -DSERIAL_DEBUG=1 for the ASL compiler, which is what compiles the
+          # \_SB.OutDbg / InitSerialDebugger / OutOneByte methods into the DSDT. This file is
+          # included at HpPlatformPkg.dsc:204 and BuildOptions.dsc at :498, so the ordering works.
+          #
+          # HP_RTD3_ACPI_MEM_DEBUG_ENABLE is left in the condition so the original RTD3 path still
+          # works if anything sets it. Note that the usual route to it - HpDebugOptions.dsc via
+          # HpFeatureConfig.dsc:26 - only fires when LOG_POST is defined, which Z21 does not set.
+          #
+      !if ($(HP_DEBUG_LOG_ACPI) == TRUE) OR ($(HP_RTD3_ACPI_MEM_DEBUG_ENABLE) == TRUE)
+         gHpIntelChipsetPkgTokenSpaceGuid.PcdSerialDebugInAcpiEnable|TRUE
+      !else
+         gHpIntelChipsetPkgTokenSpaceGuid.PcdSerialDebugInAcpiEnable|FALSE
+# ----------------------------------------------------------
+  - sub_path: 'HpPlatformPkg/MultiProject/Z21ManaanPkg/Config/PlatformPcdConfig.dsc'
+    label: 'PlatformPcdConfig.dsc 修改 3'
+    option_debug_flag: false
+    old_code: |2
+
+
+         # Specifies whether StatusCode is reported via PostCode
+      !if ($(TARGET) == DEBUG) OR ($(HP_POST_CODE_TO_SERIAL_PORT_ENABLE) == TRUE)
+         gHpIntelChipsetPkgTokenSpaceGuid.PcdStatusCodeUseSerialPortPlatform|TRUE
+      !endif
+      !if gPlatformModuleTokenSpaceGuid.PcdPostCodeStatusCodeEnable == TRUE
+    new_code: |2
+
+
+         # Specifies whether StatusCode is reported via PostCode
+      !if ($(TARGET) == DEBUG) OR ($(HP_POST_CODE_TO_SERIAL_PORT_ENABLE) == TRUE)
+         gHpIntelChipsetPkgTokenSpaceGuid.PcdStatusCodeUseSerialPortPlatform|TRUE
+      !endif
+
+         #
+         # Partner to the SIO UART activation gate in SerialPortPlatformHookLib.c
+         #
+         #     #if DEBUG_MODE || FixedPcdGetBool (PcdHpPostCodeToSerialPortEnable)
+         #
+         # That gate compiles the activation code in; this PCD routes status codes through the
+         # platform serial path, which is what actually calls it early in the boot. Without both,
+         # the Nuvoton UART LDN at 0x3F8 is never activated and writes to it - from either
+         # HpForceDebugLib or the ASL debugger - go nowhere.
+         #
+         # Which half of the gate is satisfied depends on the combination: HP_DEBUG_LOG_BIOS gives
+         # DEBUG_MODE=1, and for the ACPI-only case HpFeatureMiscConfig.dsc forces the PCD instead.
+         # Either way this PCD is needed, so the condition below covers both.
+         #
+         # The !if above keys off the HP_POST_CODE_TO_SERIAL_PORT_ENABLE build macro, which is not
+         # set for a RELEASE build, so force the PCD directly.
+         #
+      !if ($(HP_DEBUG_LOG_BIOS) == TRUE) OR ($(HP_DEBUG_LOG_ACPI) == TRUE) OR ($(HP_DEBUG_LOG_POST) == TRUE)
+         gHpIntelChipsetPkgTokenSpaceGuid.PcdStatusCodeUseSerialPortPlatform|TRUE
+      !endif
+      !if gPlatformModuleTokenSpaceGuid.PcdPostCodeStatusCodeEnable == TRUE
+# ----------------------------------------------------------
+  - sub_path: 'HpPlatformPkg/MultiProject/Z21ManaanPkg/Config/PlatformPkgConfig.dsc'
+    label: 'PlatformPkgConfig.dsc'
+    option_debug_flag: false
+    old_code: |2
+
+      #
+      # HpPlatformPkg
+      #
+        DEFINE DEBUG_BIOS_ENABLE = FALSE
+        DEFINE DXE_COMPRESS_ENABLE = TRUE
+        DEFINE FAT_ENABLE = TRUE
+        DEFINE LFMA_ENABLE = FALSE                # Load module at fixed address feature
+    new_code: |2
+
+      #
+      # HpPlatformPkg
+      #
+        #
+        # Driven by HP_DEBUG_LOG_BIOS in <Project>PkgConfig.dsc.
+        #
+        # TRUE with TARGET=RELEASE is HP's documented "optimised image that still has debug
+        # messages" mode. It is the switch that actually makes DEBUG() work in a RELEASE build:
+        # BuildOptions.dsc replaces  -DMDEPKG_NDEBUG -DNDEBUG  (which compiles every DEBUG()
+        # away) with  -DEFI_DEBUG -DDEBUG_MODE=1 .
+        #
+      !if $(HP_DEBUG_LOG_BIOS) == TRUE
+        DEFINE DEBUG_BIOS_ENABLE = TRUE
+      !else
+        DEFINE DEBUG_BIOS_ENABLE = FALSE
+      !endif
+        DEFINE DXE_COMPRESS_ENABLE = TRUE
+        DEFINE FAT_ENABLE = TRUE
+        DEFINE LFMA_ENABLE = FALSE                # Load module at fixed address feature
+# ----------------------------------------------------------
   - sub_path: 'HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/ExpansionSlotLib/ExpansionSlotLib.inf'
     label: 'ExpansionSlotLib.inf'
     option_debug_flag: false
@@ -323,6 +531,133 @@ modifications:
 
       // ---------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------
+  - sub_path: 'HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.c'
+    label: 'PlatformBootOrderLib.c 修改 2'
+    option_debug_flag: false
+    old_code: |2
+
+
+        BOOTORDER_PRINT ((BOOTORDER_ERR_LVL, "[DxeInitLinkedListForBootOrder] Entry\n"));
+
+        if (!InitializedLinkList)
+        {
+          //
+    new_code: |2
+
+
+        BOOTORDER_PRINT ((BOOTORDER_ERR_LVL, "[DxeInitLinkedListForBootOrder] Entry\n"));
+
+        //
+        // HpForceDebugLib self-test marker - DXE phase. Safe to delete.
+        //
+        DEBUG ((DEBUG_INFO, "[HpForceDebug][DXE] DxeInitLinkedListForBootOrder entered, InitializedLinkList = %d\n",
+                InitializedLinkList));
+
+        if (!InitializedLinkList)
+        {
+          //
+# ----------------------------------------------------------
+  - sub_path: 'HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.inf'
+    label: 'PlatformBootOrderLib.inf'
+    option_debug_flag: false
+    old_code: |2
+
+         HpGpioLib
+         PcdLib
+         PciSegmentLib
+
+      [Pcd]
+         gEfiHpStoragePkgTokenSpaceGuid.PcdHpStoragePlaceHolderSupport
+    new_code: |2
+
+         HpGpioLib
+         PcdLib
+         PciSegmentLib
+         HpForceDebugLib
+
+      [Pcd]
+         gEfiHpStoragePkgTokenSpaceGuid.PcdHpStoragePlaceHolderSupport
+# ----------------------------------------------------------
+  - sub_path: 'HpPlatformPkg/MultiProject/Z21ManaanPkg/PlatformPortingPei/DriverEntry.c'
+    label: 'DriverEntry.c'
+    option_debug_flag: false
+    old_code: |2
+
+
+      #include "Meta.h"
+      #include <HpDebugPrint.h>
+
+      // ---------------------------------------------------------------------------------------------------------------------
+      // Local Macro Definitions
+    new_code: |2
+
+
+      #include "Meta.h"
+      #include <HpDebugPrint.h>
+
+      //
+      // Keep this last. It takes over the DEBUG() macro so the messages in this file are emitted
+      // even in a RELEASE build, where MDEPKG_NDEBUG would normally compile them away and the global
+      // PcdDebugPrintErrorLevel is 0. Delete the line to make this file quiet again.
+      //
+      // This PEIM has [Depex] TRUE, so it can dispatch before anything else in PEI - which makes it
+      // the proof that HpForceDebugLib is safe at the earliest point in the boot.
+      //
+      // Note that the HpDebugPrint.h helpers (FUNCTION_STARTS, ERR_TRACE_STATUS, ...) expand to
+      // DEBUG() where they are used, which is below this line - so they print too.
+      //
+      #include <Library/HpForceDebugLib.h>
+
+
+      // ---------------------------------------------------------------------------------------------------------------------
+      // Local Macro Definitions
+# ----------------------------------------------------------
+  - sub_path: 'HpPlatformPkg/MultiProject/Z21ManaanPkg/PlatformPortingPei/DriverEntry.c'
+    label: 'DriverEntry.c 修改 2'
+    option_debug_flag: false
+    old_code: |2
+
+
+        EFI_STATUS  Status = EFI_NOT_STARTED;
+
+        Status = PlatformIdPeiEntry (FileHandle, PeiServices);
+        if (Status != EFI_SUCCESS)
+        {
+    new_code: |2
+
+
+        EFI_STATUS  Status = EFI_NOT_STARTED;
+
+        //
+        // HpForceDebugLib self-test marker - PEI phase. Safe to delete.
+        //
+        DEBUG ((DEBUG_INFO, "[HpForceDebug][PEI] PlatformPortingPei DriverEntry reached\n"));
+
+        Status = PlatformIdPeiEntry (FileHandle, PeiServices);
+        if (Status != EFI_SUCCESS)
+        {
+# ----------------------------------------------------------
+  - sub_path: 'HpPlatformPkg/MultiProject/Z21ManaanPkg/PlatformPortingPei/PlatformPortingPei.inf'
+    label: 'PlatformPortingPei.inf'
+    option_debug_flag: false
+    old_code: |2+
+
+         PciExpressLib
+         BaseMemoryLib
+         OptionCardDetectLib
+
+      [Guids]
+
+    new_code: |2+
+
+         PciExpressLib
+         BaseMemoryLib
+         OptionCardDetectLib
+         HpForceDebugLib
+
+      [Guids]
+
+# ----------------------------------------------------------
   - sub_path: 'HpPlatformPkg/MultiProject/Z21ManaanPkg/Z21ManaanPkgConfig.dsc'
     label: 'Z21ManaanPkgConfig.dsc'
     option_debug_flag: false
@@ -413,534 +748,5 @@ modifications:
          !include $(HP_PROJECT_PACKAGE)/Config/HpFeature/BootOptionsConfig.dsc
          !include $(HP_PROJECT_PACKAGE)/Config/HpFeature/SystemOptionsConfig.dsc
 # ----------------------------------------------------------
-  - sub_path: 'HpPlatformPkg/MultiProject/Z22MekrosPkg/Library/ExpansionSlotLib/ExpansionSlotLib.inf'
-    label: 'ExpansionSlotLib.inf'
-    option_debug_flag: false
-    old_code: |2-
 
-
-      [LibraryClasses]
-         HpGpioLib
-
-      [Guids]
-
-      [Pcd]
-         gEfiHpPlatformPkgTokenSpaceGuid.PcdHpPlatformID
-    new_code: |2
-
-
-      [LibraryClasses]
-         HpGpioLib
-         HpForceDebugLib
-
-      [Guids]
-
-      [Pcd]
-         gEfiHpPlatformPkgTokenSpaceGuid.PcdHpPlatformID
-# ----------------------------------------------------------
-  - sub_path: 'HpPlatformPkg/MultiProject/Z22MekrosPkg/Library/ExpansionSlotLib/ExpansionSlots.c'
-    label: 'ExpansionSlots.c'
-    option_debug_flag: false
-    old_code: |2
-
-      #include <PlatformDefinitions.h>
-      #include <HpPlatformId.h>
-
-      static EXPANSION_SLOT_DEFINITION mSlotDefinition[MAX_SLOTS] =
-      {
-      //  SlotPos           SlotType
-    new_code: |2
-
-      #include <PlatformDefinitions.h>
-      #include <HpPlatformId.h>
-
-      //
-      // Keep this last. It takes over the DEBUG() macro so the messages in this file are emitted
-      // even in a RELEASE build, where MDEPKG_NDEBUG would normally compile them away and DebugLib
-      // is the Null instance. Delete the line to make this file quiet again.
-      //
-      #include <Library/HpForceDebugLib.h>
-
-      static EXPANSION_SLOT_DEFINITION mSlotDefinition[MAX_SLOTS] =
-      {
-      //  SlotPos           SlotType
-# ----------------------------------------------------------
-  - sub_path: 'HpPlatformPkg/MultiProject/Z22MekrosPkg/Library/ExpansionSlotLib/ExpansionSlots.c'
-    label: 'ExpansionSlots.c 修改 2'
-    option_debug_flag: false
-    old_code: |2+
-
-         VOID
-         )
-      {
-         return mSlotDefinition;
-      }
-
-    new_code: |2+
-
-         VOID
-         )
-      {
-         DEBUG ((DEBUG_INFO, "[HpForceDebug][ExpansionSlots] GetSlotDefinition called\n"));
-         return mSlotDefinition;
-      }
-
-# ----------------------------------------------------------
-  - sub_path: 'HpPlatformPkg/MultiProject/Z22MekrosPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.c'
-    label: 'PlatformBootOrderLib.c'
-    option_debug_flag: false
-    old_code: |2
-
-      #include <Library/PciSegmentLib.h>
-      #include <IndustryStandard/Pci.h>
-
-
-      // ---------------------------------------------------------------------------------------------------------------------
-      // Local Macro Definitions
-    new_code: |2
-
-      #include <Library/PciSegmentLib.h>
-      #include <IndustryStandard/Pci.h>
-
-      //
-      // Keep this last. It takes over the DEBUG() macro so the messages in this file are emitted
-      // even in a RELEASE build, where MDEPKG_NDEBUG would normally compile them away and DebugLib
-      // is the Null instance. Delete the line to make this file quiet again.
-      //
-      #include <Library/HpForceDebugLib.h>
-
-      // ---------------------------------------------------------------------------------------------------------------------
-      // Local Macro Definitions
-# ----------------------------------------------------------
-  - sub_path: 'HpPlatformPkg/MultiProject/Z22MekrosPkg/Z22MekrosPkgConfig.dsc'
-    label: 'Z22MekrosPkgConfig.dsc'
-    option_debug_flag: false
-    old_code: |2
-
-      #
-
-      [Defines]
-         !include $(HP_PROJECT_PACKAGE)/Config/HpFeature/HpFeatureMiscConfig.dsc
-         !include $(HP_PROJECT_PACKAGE)/Config/HpFeature/BootOptionsConfig.dsc
-         !include $(HP_PROJECT_PACKAGE)/Config/HpFeature/SystemOptionsConfig.dsc
-    new_code: |2
-
-      #
-
-      [Defines]
-         #
-         # Serial debug output selection. All three sides share the one SIO UART at IO 0x3F8, and
-         # they are independent - any combination is valid.
-         #
-         #   HP_DEBUG_LOG_BIOS  BIOS-side DEBUG() from C code (PEI / DXE / SMM).
-         #                      Drives DEBUG_BIOS_ENABLE. Files opt in individually by including
-         #                      <Library/HpForceDebugLib.h>; see
-         #                      HpPlatformPkg/Library/HpForceDebugLib/README.md.
-         #
-         #   HP_DEBUG_LOG_ACPI  ACPI-side tracing from AML. Drives PcdSerialDebugInAcpiEnable,
-         #                      which BuildOptions.dsc turns into -DSERIAL_DEBUG=1 for the ASL
-         #                      compiler. The output comes from Intel's ADBG (~2000 call sites
-         #                      already in the DSDT), routed to the UART by SDBG in the local
-         #                      copy of PlatformHooks.asl under AcpiTables/Dt/Dsdt/ - see the
-         #                      HP_MOD block there. HP's own \_SB.OutDbg() plumbing is also
-         #                      compiled in but has no live call sites on this board.
-         #
-         #   HP_DEBUG_LOG_POST  POST code trace, one line per status code:
-         #
-         #                          POSTCODE=<1624>
-         #
-         #                      The single source is HpFeature's DebugPostCode.c
-         #
-         #                          DEBUG ((DEBUG_EVENT, "POSTCODE=<%04X>\n", (UINT16)Value));
-         #
-         #                      linked into RtsCallbackHandler Pei/Dxe/Smm, which hang off
-         #                      ReportStatusCode. Those three modules contain no other DEBUG() at
-         #                      all, and DEBUG_EVENT is used in exactly one more place in the whole
-         #                      tree (Intel's PeiSmbusLib, which resolves to DebugLibNull), so
-         #                      selecting that one level yields the POST codes and nothing else.
-         #
-         #                      Two things have to line up, hence two knobs below:
-         #                        - HP_FEATURE_ERROR_HANDLING_DEBUG_MSG gives those modules a
-         #                          printing DebugLib and -UMDEPKG_NDEBUG. It is declared under
-         #                          !ifndef upstream, so defining it here wins.
-         #                        - PROJECT_DEBUG_LEVEL must contain DEBUG_EVENT (0x00080000);
-         #                          see Config/PlatformPcdConfig.dsc.
-         #
-         # Defined here rather than in PlatformPkgConfig.dsc because HpFeatureMiscConfig.dsc is
-         # included first and has to see them.
-         #
-         # Telling the three apart in a capture: BIOS output happens during POST and carries
-         # whatever tag the opted-in file uses; POST codes are the fixed POSTCODE=<xxxx> form and
-         # also run through POST; ACPI output starts at DSDT load and is Intel's bracketed form,
-         # e.g. "[DSDT][AcpiTableEntry]".
-         #
-         # Set all three FALSE for a shipping build.
-         #
-         DEFINE HP_DEBUG_LOG_BIOS = TRUE
-         DEFINE HP_DEBUG_LOG_ACPI = TRUE
-         DEFINE HP_DEBUG_LOG_POST = TRUE
-
-         #
-         # Opens up RtsCallbackHandler Pei/Dxe/Smm (and the rest of HpFeatureErrorHandling, which
-         # costs nothing - PROJECT_DEBUG_LEVEL keeps them quiet). Upstream default lives in
-         # HpFeatureErrorHandlingPubIntPkgDebugConfig.dsc:16 behind !ifndef, so this takes
-         # precedence rather than colliding.
-         #
-         # One known side effect: CmosButtonLoadDefaultsPei carries its own module-scope
-         # PcdDebugPrintErrorLevel|0x80080046, which overrides PROJECT_DEBUG_LEVEL, so its single
-         # EFI_D_ERROR line reappears:
-         #
-         #        ClearCmosButtonPressedHob->Pressed = 0
-         #
-         # TceqAlertPei has the same override but contains no DEBUG() at all, so it stays silent.
-         #
-      !if $(HP_DEBUG_LOG_POST) == TRUE
-         DEFINE HP_FEATURE_ERROR_HANDLING_DEBUG_MSG = TRUE
-      !endif
-
-         !include $(HP_PROJECT_PACKAGE)/Config/HpFeature/HpFeatureMiscConfig.dsc
-         !include $(HP_PROJECT_PACKAGE)/Config/HpFeature/BootOptionsConfig.dsc
-         !include $(HP_PROJECT_PACKAGE)/Config/HpFeature/SystemOptionsConfig.dsc
-# ----------------------------------------------------------
-
-platform_pcd_modifications:
-  - file_name: 'HpFeatureMiscConfig.dsc'
-    label: 'HpFeatureMiscConfig.dsc'
-    option_debug_flag: false
-    old_code: |2-
-
-         gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable|FALSE
-      !if $(FSP_DEBUG_IN_RELEASE_MODE) == TRUE
-         gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable|TRUE
-      !endif
-    new_code: |2-
-
-         gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable|FALSE
-      !if $(FSP_DEBUG_IN_RELEASE_MODE) == TRUE
-         gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable|TRUE
-      !endif
-
-         #
-         # Activate the SIO debug UART in a RELEASE build. Both output paths need it - the ASL side
-         # writes IO 0x3F8 directly, so if the LDN was never activated its writes go nowhere just
-         # the same as the BIOS side's.
-         #
-         # SerialPortPlatformHookLib.c gates the Nuvoton SIO UART LDN on
-         #
-         #     #if DEBUG_MODE || FixedPcdGetBool (PcdHpPostCodeToSerialPortEnable)
-         #
-         # so either half of that is enough on its own. HP_DEBUG_LOG_BIOS defines DEBUG_MODE=1
-         # tree-wide (via DEBUG_BIOS_ENABLE -> BuildOptions.dsc -> *_*_*_CC_FLAGS), which satisfies
-         # the first half. This PCD is therefore forced ONLY for the ACPI-only combination, where
-         # DEBUG_MODE does not exist and the PCD is the sole thing keeping the UART alive. The !if
-         # above keys off FSP_DEBUG_IN_RELEASE_MODE, which envVariables.txt hardcodes to FALSE, so
-         # it never fires - hence forcing it here.
-         #
-         # Deliberately NOT forced when HP_DEBUG_LOG_BIOS is on. Upstream HpFeature DSCs read this
-         # PCD as "turn my debug output on", and when it is TRUE they hand their own modules a
-         # printing DebugLib, PcdDebugPrintErrorLevel|0x80080046 and -UMDEPKG_NDEBUG. That defeats
-         # the per-file opt-in HpForceDebugLib exists to provide - those modules print regardless of
-         # PROJECT_DEBUG_LEVEL. The three DSCs that do it:
-         #
-         #   BuiltInDeviceOptionsPubSrcPkgInf.dsc     BuiltInDeviceOptions Pei/Dxe/Smm
-         #   HpFeatureMiscPubSrcPkgInf.dsc            HpFeatureMisc Pei/Dxe/Smm
-         #   HpFeatureErrorHandlingPubSrcPkgInf.dsc   TceqAlertPei, CmosButtonLoadDefaultsPei
-         #
-         # Enabling the UART on its own was measured as harmless on this board: a RELEASE image with
-         # the UART active and no traffic boots normally.
-         #
-         # HP_DEBUG_LOG_POST is in the condition for the same reason as ACPI: it does not define
-         # DEBUG_MODE either (the POST code path gets its -UMDEPKG_NDEBUG from the module-scope
-         # block that HP_FEATURE_ERROR_HANDLING_DEBUG_MSG opens), so a POST-only build has nothing
-         # else to activate the UART with. A POST-only or ACPI-only build therefore carries the
-         # extra HpFeature module output listed above as a known cost; combining either with
-         # HP_DEBUG_LOG_BIOS avoids it, since DEBUG_MODE then covers the UART.
-         #
-      !if ($(HP_DEBUG_LOG_BIOS) == FALSE) AND (($(HP_DEBUG_LOG_ACPI) == TRUE) OR ($(HP_DEBUG_LOG_POST) == TRUE))
-         gEfiHpFeatureMiscPubIntPkgTokenSpaceGuid.PcdHpPostCodeToSerialPortEnable|TRUE
-      !endif
-# ----------------------------------------------------------
-  - file_name: 'PlatformPcdConfig.dsc'
-    label: 'PlatformPcdConfig.dsc'
-    option_debug_flag: false
-    old_code: |2+
-
-      #
-
-      [Defines]
-        DEFINE PROJECT_DEBUG_LEVEL = 0x80080046  # DEBUG_ERROR | DEBUG_EVENT | DEBUG_WARN | DEBUG_LOAD
-        DEFINE DBG_SERIAL_PORT_BASE     = 0x3F8
-        DEFINE SYSTEM_SIO_BASE_ADDRESS  = 0x260
-
-    new_code: |2+
-
-      #
-
-      [Defines]
-        #
-        # Global debug volume, once DEBUG_BIOS_ENABLE=TRUE has made DEBUG() live in RELEASE.
-        #
-        # This is a bitmask ANDed with each DEBUG()'s level, so the value below - 0 - silences
-        # every generic DEBUG() in the tree. That is deliberate. HpForceDebugLib has its own
-        # HP_FORCE_DEBUG_LEVEL and does not consult this PCD, so the files that opted in still
-        # print while everything else stays quiet. Keeping the volume down matters here: this
-        # board does not survive a full debug image.
-        #
-        #   0x00000000  opted-in files only          <- HP_DEBUG_LOG_POST = FALSE
-        #   0x00080000  + DEBUG_EVENT                <- HP_DEBUG_LOG_POST = TRUE
-        #   0x80000000  + DEBUG_ERROR everywhere     useful as a canary: if the HpFeature
-        #                                            ListFeatureSetting lines appear, the build
-        #                                            config and the UART are both fine and any
-        #                                            missing message is down to that one file
-        #   0x80080046  DEBUG_ERROR | DEBUG_EVENT | DEBUG_WARN | DEBUG_LOAD - the original value
-        #
-        # DEBUG_EVENT (0x00080000) is picked out on its own for HP_DEBUG_LOG_POST because the only
-        # DEBUG_EVENT call site in the tree that can reach a printing DebugLib is HpFeature's
-        # DebugPostCode.c - "POSTCODE=<%04X>", linked into RtsCallbackHandler Pei/Dxe/Smm. The one
-        # other user of that level, Intel's PeiSmbusLib, resolves to DebugLibNull. So raising the
-        # volume by this one bit adds the POST code trace and nothing else. See HP_DEBUG_LOG_POST
-        # in <Project>PkgConfig.dsc for the other half of the wiring.
-        #
-      !if $(HP_DEBUG_LOG_POST) == TRUE
-        DEFINE PROJECT_DEBUG_LEVEL = 0x00080000
-      !else
-        DEFINE PROJECT_DEBUG_LEVEL = 0x00000000
-      !endif
-        DEFINE DBG_SERIAL_PORT_BASE     = 0x3F8
-        DEFINE SYSTEM_SIO_BASE_ADDRESS  = 0x260
-
-# ----------------------------------------------------------
-  - file_name: 'PlatformPcdConfig.dsc'
-    label: 'PlatformPcdConfig.dsc 修改 2'
-    option_debug_flag: false
-    old_code: |2
-
-      !endif
-
-          # PCD to enable Serial Debug in ACPI
-      !if $(HP_RTD3_ACPI_MEM_DEBUG_ENABLE) == TRUE
-         gHpIntelChipsetPkgTokenSpaceGuid.PcdSerialDebugInAcpiEnable|TRUE
-      !else
-         gHpIntelChipsetPkgTokenSpaceGuid.PcdSerialDebugInAcpiEnable|FALSE
-    new_code: |2
-
-      !endif
-
-          # PCD to enable Serial Debug in ACPI
-          #
-          # Driven by HP_DEBUG_LOG_ACPI in this project's own PkgConfig.dsc. BuildOptions.dsc:47 reads this
-          # PCD and turns it into -DSERIAL_DEBUG=1 for the ASL compiler, which is what compiles the
-          # \_SB.OutDbg / InitSerialDebugger / OutOneByte methods into the DSDT. This file is
-          # included at HpPlatformPkg.dsc:204 and BuildOptions.dsc at :498, so the ordering works.
-          #
-          # HP_RTD3_ACPI_MEM_DEBUG_ENABLE is left in the condition so the original RTD3 path still
-          # works if anything sets it. Note that the usual route to it - HpDebugOptions.dsc via
-          # HpFeatureConfig.dsc:26 - only fires when LOG_POST is defined, which this project does not set.
-          #
-      !if ($(HP_DEBUG_LOG_ACPI) == TRUE) OR ($(HP_RTD3_ACPI_MEM_DEBUG_ENABLE) == TRUE)
-         gHpIntelChipsetPkgTokenSpaceGuid.PcdSerialDebugInAcpiEnable|TRUE
-      !else
-         gHpIntelChipsetPkgTokenSpaceGuid.PcdSerialDebugInAcpiEnable|FALSE
-# ----------------------------------------------------------
-  - file_name: 'PlatformPcdConfig.dsc'
-    label: 'PlatformPcdConfig.dsc 修改 3'
-    option_debug_flag: false
-    old_code: |2
-
-
-         # Specifies whether StatusCode is reported via PostCode
-      !if ($(TARGET) == DEBUG) OR ($(HP_POST_CODE_TO_SERIAL_PORT_ENABLE) == TRUE)
-         gHpIntelChipsetPkgTokenSpaceGuid.PcdStatusCodeUseSerialPortPlatform|TRUE
-      !endif
-      !if gPlatformModuleTokenSpaceGuid.PcdPostCodeStatusCodeEnable == TRUE
-    new_code: |2
-
-
-         # Specifies whether StatusCode is reported via PostCode
-      !if ($(TARGET) == DEBUG) OR ($(HP_POST_CODE_TO_SERIAL_PORT_ENABLE) == TRUE)
-         gHpIntelChipsetPkgTokenSpaceGuid.PcdStatusCodeUseSerialPortPlatform|TRUE
-      !endif
-
-         #
-         # Partner to the SIO UART activation gate in SerialPortPlatformHookLib.c
-         #
-         #     #if DEBUG_MODE || FixedPcdGetBool (PcdHpPostCodeToSerialPortEnable)
-         #
-         # That gate compiles the activation code in; this PCD routes status codes through the
-         # platform serial path, which is what actually calls it early in the boot. Without both,
-         # the Nuvoton UART LDN at 0x3F8 is never activated and writes to it - from either
-         # HpForceDebugLib or the ASL debugger - go nowhere.
-         #
-         # Which half of the gate is satisfied depends on the combination: HP_DEBUG_LOG_BIOS gives
-         # DEBUG_MODE=1, and for the ACPI-only case HpFeatureMiscConfig.dsc forces the PCD instead.
-         # Either way this PCD is needed, so the condition below covers both.
-         #
-         # The !if above keys off the HP_POST_CODE_TO_SERIAL_PORT_ENABLE build macro, which is not
-         # set for a RELEASE build, so force the PCD directly.
-         #
-      !if ($(HP_DEBUG_LOG_BIOS) == TRUE) OR ($(HP_DEBUG_LOG_ACPI) == TRUE) OR ($(HP_DEBUG_LOG_POST) == TRUE)
-         gHpIntelChipsetPkgTokenSpaceGuid.PcdStatusCodeUseSerialPortPlatform|TRUE
-      !endif
-      !if gPlatformModuleTokenSpaceGuid.PcdPostCodeStatusCodeEnable == TRUE
-# ----------------------------------------------------------
-  - file_name: 'PlatformPkgConfig.dsc'
-    label: 'PlatformPkgConfig.dsc'
-    option_debug_flag: false
-    old_code: |2
-
-      #
-      # HpPlatformPkg
-      #
-        DEFINE DEBUG_BIOS_ENABLE = FALSE
-        DEFINE DXE_COMPRESS_ENABLE = TRUE
-        DEFINE FAT_ENABLE = TRUE
-        DEFINE LFMA_ENABLE = FALSE                # Load module at fixed address feature
-    new_code: |2
-
-      #
-      # HpPlatformPkg
-      #
-        #
-        # Driven by HP_DEBUG_LOG_BIOS in <Project>PkgConfig.dsc.
-        #
-        # TRUE with TARGET=RELEASE is HP's documented "optimised image that still has debug
-        # messages" mode. It is the switch that actually makes DEBUG() work in a RELEASE build:
-        # BuildOptions.dsc replaces  -DMDEPKG_NDEBUG -DNDEBUG  (which compiles every DEBUG()
-        # away) with  -DEFI_DEBUG -DDEBUG_MODE=1 .
-        #
-      !if $(HP_DEBUG_LOG_BIOS) == TRUE
-        DEFINE DEBUG_BIOS_ENABLE = TRUE
-      !else
-        DEFINE DEBUG_BIOS_ENABLE = FALSE
-      !endif
-        DEFINE DXE_COMPRESS_ENABLE = TRUE
-        DEFINE FAT_ENABLE = TRUE
-        DEFINE LFMA_ENABLE = FALSE                # Load module at fixed address feature
-# ----------------------------------------------------------
-  - file_name: 'PlatformBootOrderLib.c'
-    label: 'PlatformBootOrderLib.c 修改 2'
-    option_debug_flag: false
-    old_code: |2
-
-
-        BOOTORDER_PRINT ((BOOTORDER_ERR_LVL, "[DxeInitLinkedListForBootOrder] Entry\n"));
-
-        if (!InitializedLinkList)
-        {
-          //
-    new_code: |2
-
-
-        BOOTORDER_PRINT ((BOOTORDER_ERR_LVL, "[DxeInitLinkedListForBootOrder] Entry\n"));
-
-        //
-        // HpForceDebugLib self-test marker - DXE phase. Safe to delete.
-        //
-        DEBUG ((DEBUG_INFO, "[HpForceDebug][DXE] DxeInitLinkedListForBootOrder entered, InitializedLinkList = %d\n",
-                InitializedLinkList));
-
-        if (!InitializedLinkList)
-        {
-          //
-# ----------------------------------------------------------
-  - file_name: 'PlatformBootOrderLib.inf'
-    label: 'PlatformBootOrderLib.inf'
-    option_debug_flag: false
-    old_code: |2
-
-         HpGpioLib
-         PcdLib
-         PciSegmentLib
-
-      [Pcd]
-         gEfiHpStoragePkgTokenSpaceGuid.PcdHpStoragePlaceHolderSupport
-    new_code: |2
-
-         HpGpioLib
-         PcdLib
-         PciSegmentLib
-         HpForceDebugLib
-
-      [Pcd]
-         gEfiHpStoragePkgTokenSpaceGuid.PcdHpStoragePlaceHolderSupport
-# ----------------------------------------------------------
-  - file_name: 'DriverEntry.c'
-    label: 'DriverEntry.c'
-    option_debug_flag: false
-    old_code: |2
-
-
-      #include "Meta.h"
-      #include <HpDebugPrint.h>
-
-      // ---------------------------------------------------------------------------------------------------------------------
-      // Local Macro Definitions
-    new_code: |2
-
-
-      #include "Meta.h"
-      #include <HpDebugPrint.h>
-
-      //
-      // Keep this last. It takes over the DEBUG() macro so the messages in this file are emitted
-      // even in a RELEASE build, where MDEPKG_NDEBUG would normally compile them away and the global
-      // PcdDebugPrintErrorLevel is 0. Delete the line to make this file quiet again.
-      //
-      // This PEIM has [Depex] TRUE, so it can dispatch before anything else in PEI - which makes it
-      // the proof that HpForceDebugLib is safe at the earliest point in the boot.
-      //
-      // Note that the HpDebugPrint.h helpers (FUNCTION_STARTS, ERR_TRACE_STATUS, ...) expand to
-      // DEBUG() where they are used, which is below this line - so they print too.
-      //
-      #include <Library/HpForceDebugLib.h>
-
-
-      // ---------------------------------------------------------------------------------------------------------------------
-      // Local Macro Definitions
-# ----------------------------------------------------------
-  - file_name: 'DriverEntry.c'
-    label: 'DriverEntry.c 修改 2'
-    option_debug_flag: false
-    old_code: |2
-
-
-        EFI_STATUS  Status = EFI_NOT_STARTED;
-
-        Status = PlatformIdPeiEntry (FileHandle, PeiServices);
-        if (Status != EFI_SUCCESS)
-        {
-    new_code: |2
-
-
-        EFI_STATUS  Status = EFI_NOT_STARTED;
-
-        //
-        // HpForceDebugLib self-test marker - PEI phase. Safe to delete.
-        //
-        DEBUG ((DEBUG_INFO, "[HpForceDebug][PEI] PlatformPortingPei DriverEntry reached\n"));
-
-        Status = PlatformIdPeiEntry (FileHandle, PeiServices);
-        if (Status != EFI_SUCCESS)
-        {
-# ----------------------------------------------------------
-  - file_name: 'PlatformPortingPei.inf'
-    label: 'PlatformPortingPei.inf'
-    option_debug_flag: false
-    old_code: |2+
-
-         PciExpressLib
-         BaseMemoryLib
-         OptionCardDetectLib
-
-      [Guids]
-
-    new_code: |2+
-
-         PciExpressLib
-         BaseMemoryLib
-         OptionCardDetectLib
-         HpForceDebugLib
-
-      [Guids]
-
-# ----------------------------------------------------------
+platform_pcd_modifications: []
