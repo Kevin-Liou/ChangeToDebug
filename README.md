@@ -245,6 +245,7 @@ FY27 與前兩代性質不同，套用後還有兩件工具不會做的事：新
 
 - 執行記錄同時顯示在視窗下方並寫入程式目錄的 `ChangeToDebug_log.txt`
 - 勾選「備份原始檔案」時，同一次執行的備份共用一組時間戳：`原檔名.bak.<yyyymmddHHMMSS>`
+- 右上角可從下拉選單挑佈景主題：內建淺／深色之外，另有 GitHub、Solarized、Gruvbox、Catppuccin、One Dark Pro、Dracula、Nord、Tokyo Night、Monokai、Rosé Pine 等常見編輯器配色（淺色 6 組、深色 10 組），色票集中在 `gui/theme.py`
 - 設定（最近路徑、選項、主題）存在程式目錄的 `ChangeToDebug_settings.json`；會自動沿用舊版 `last_path_config.json` 的最近路徑
 - test build 的 exe 可以在 GitHub Actions 裡找到
 

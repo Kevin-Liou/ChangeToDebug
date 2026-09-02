@@ -19,7 +19,7 @@ from ..core.logbus import Logger
 from ..core.profiles import detect_profile, load_profiles, yaml
 from ..core.runner import RunRequest
 from .pages import PAGE_CLASSES
-from .theme import build_stylesheet, log_colors, palette
+from .theme import build_stylesheet, list_themes, log_colors, palette, with_alpha
 from .worker import RunWorker
 
 #: 保留在記憶體中的訊息筆數（切換主題時用來重畫）
@@ -135,9 +135,19 @@ class MainWindow(QMainWindow):
         layout.addWidget(version)
         layout.addStretch(1)
 
-        self.theme_btn = QPushButton("切換深色")
-        self.theme_btn.clicked.connect(self._toggle_theme)
-        layout.addWidget(self.theme_btn)
+        # 主題下拉：淺色一組、深色一組，中間以分隔線隔開。userData 存主題 key。
+        self.theme_combo = QComboBox()
+        self.theme_combo.setToolTip("佈景主題")
+        self.theme_combo.setMinimumWidth(150)
+        themes = list_themes()
+        for kind in ("light", "dark"):
+            if kind == "dark" and self.theme_combo.count():
+                self.theme_combo.insertSeparator(self.theme_combo.count())
+            for key, label, k in themes:
+                if k == kind:
+                    self.theme_combo.addItem(label, key)
+        self.theme_combo.currentIndexChanged.connect(self._on_theme_selected)
+        layout.addWidget(self.theme_combo)
 
         about_btn = QPushButton("關於")
         about_btn.clicked.connect(self._show_about)
@@ -341,13 +351,22 @@ class MainWindow(QMainWindow):
     # ================================================================ 主題
 
     def _apply_theme(self, name):
+        # 設定檔可能存著已不存在的主題名，palette() 會退回預設；這裡也同步把
+        # 名稱正規化，下拉選單才找得到對應項目
+        if self.theme_combo.findData(name) < 0:
+            name = "light"
         self.theme_name = name
         self.setStyleSheet(build_stylesheet(name))
-        self.theme_btn.setText("切換淺色" if name == "dark" else "切換深色")
+        self.theme_combo.blockSignals(True)
+        self.theme_combo.setCurrentIndex(self.theme_combo.findData(name))
+        self.theme_combo.blockSignals(False)
         self._set_chip(*self._chip_state)
 
-    def _toggle_theme(self):
-        self._apply_theme("dark" if self.theme_name == "light" else "light")
+    def _on_theme_selected(self, index):
+        key = self.theme_combo.itemData(index)
+        if not key or key == self.theme_name:
+            return
+        self._apply_theme(key)
         self._rerender_log()
         self.settings.set("theme", self.theme_name)
         self.settings.save()
@@ -356,9 +375,9 @@ class MainWindow(QMainWindow):
         self._chip_state = (kind, text)
         colors = palette(self.theme_name)
         mapping = {
-            "ok": (colors["ok"], "rgba(21,128,61,0.12)"),
-            "warn": (colors["warn"], "rgba(180,83,9,0.12)"),
-            "error": (colors["error"], "rgba(185,28,28,0.12)"),
+            "ok": (colors["ok"], with_alpha(colors["ok"], 0.15)),
+            "warn": (colors["warn"], with_alpha(colors["warn"], 0.15)),
+            "error": (colors["error"], with_alpha(colors["error"], 0.15)),
             "idle": (colors["subtext"], colors["surface_alt"]),
         }
         fg, bg = mapping.get(kind, mapping["idle"])

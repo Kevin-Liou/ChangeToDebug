@@ -5,7 +5,7 @@ from pathlib import Path
 
 APP_NAME = "ChangeToDebug"
 APP_TITLE = "ChangeToDebug - BIOS Debug Mode Patcher"
-APP_VERSION = "3.1.0"
+APP_VERSION = "3.2.0"
 
 # 設定檔 / log 檔名
 SETTINGS_FILE = "ChangeToDebug_settings.json"
