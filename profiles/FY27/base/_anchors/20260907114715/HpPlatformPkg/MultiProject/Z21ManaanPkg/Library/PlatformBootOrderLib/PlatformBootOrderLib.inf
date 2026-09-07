@@ -1,0 +1,79 @@
+#
+# (c) Copyright 2012 - 2026 HP Development Company, L.P.
+# This software and associated documentation (if any) is furnished under a license and may only be used or
+# copied in accordance with the terms of the license. Except as permitted by such license, no part of this
+# software or documentation may be reproduced, stored in a retrieval system, or transmitted in any
+# form or by any means without the express written consent of HP Development Company.
+#
+# Module Name: PlatformBootOrderLib.inf
+#
+
+[Defines]
+   INF_VERSION                    = 0x00010005
+   BASE_NAME                      = PlatformBootOrderLib
+   FILE_GUID                      = 88BE1B6D-5FDC-478c-B8B9-10DE46E9A2EA
+   MODULE_TYPE                    = BASE
+   VERSION_STRING                 = 1.0
+   LIBRARY_CLASS                  = PlatformBootOrderLib|DXE_DRIVER DXE_SMM_DRIVER
+
+[Sources]
+   PlatformBootOrderLib.c
+   PlatformBootOrderLib.uni
+
+[Packages]
+   MdePkg/MdePkg.dec
+   MdeModulePkg/MdeModulePkg.dec
+   $(HP_PLATFORM_PACKAGE_DEC)
+   $(HP_MASS_STORAGE_PUB_INT_PKG_DEC)
+   $(HP_MODULE_PUB_INT_PKG_DEC)
+   $(HP_PLATFORM_ABSTRACTION_PUB_INT_PKG_DEC)
+   $(HP_BASE_PUB_INT_PKG_DEC)
+   $(HP_BDS_EVENT_PUB_INT_PKG_DEC)
+   $(HP_MEMORY_MGMT_PUB_INT_PKG_DEC)
+   $(HP_VARIABLE_MODULE_PUB_INT_PKG_DEC)
+   $(HP_BDS_PUB_INT_PKG_DEC)
+   $(PLATFORM_SI_PACKAGE_DEC)
+   $(HP_STORAGE_PACKAGE_DEC)
+   $(HP_CHIPSET_PACKAGE_DEC)
+   $(BOOT_OPTIONS_PUB_INT_PKG_DEC)
+   $(HP_CON_DEV_PACKAGE_DEC)
+   $(HP_GFX_MISC_PUB_INT_PKG_DEC)
+   $(HP_PROJECT_PACKAGE_DEC)
+   $(HP_SIO_PACKAGE_DEC)
+   $(HP_FEATURE_MISC_PUB_INT_PKG_DEC)
+
+[LibraryClasses]
+   BaseLib
+   DebugLib
+   BaseHpPlatformServicesLib
+   UefiRuntimeServicesTableLib
+   MemoryAllocationLib
+   HiiLib
+   HpMemoryAllocationLib
+   UefiLib
+   UefiBootServicesTableLib
+   BaseMemoryLib
+   DevicePathLib
+   HpDevicePathLib
+   HpBaseMemoryLib
+   ReportStatusCodeLib
+   HpCommonPlatformBootOrderLib
+   HpStorageBootOrderLib
+   HpGpioLib
+   PcdLib
+   PciSegmentLib
+   HpVpinSelectionLib
+
+[Pcd]
+   gEfiHpStoragePkgTokenSpaceGuid.PcdHpStoragePlaceHolderSupport
+   gEfiHpConDevPkgTokenSpaceGuid.PcdUsbLanPlaceHolderSupport
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdHpPlatformID
+   gEfiHpPlatformPkgTokenSpaceGuid.PcdDGpuHwPresent
+   gEfiSioTokenSpaceGuid.PcdDtPcaId
+
+[Guids]
+   gHpVariableGuid                             ## GUID CONSUMED
+   gBdsAllDriversConnectedProtocolGuid         ## GUID CONSUMED
+
+[Protocols]
+   gHpPlatformServicesProtocolGuid

@@ -213,6 +213,9 @@ class PatchSetPage(TaskPage):
             target.setCheckState(Qt.Checked)
             target.setData(Qt.UserRole, rule.rule_id)
             tip = rule.note or rule.label
+            if rule.anchors:
+                tip = (tip + "\n" if tip else "") + \
+                    f"另有 {len(rule.anchors)} 組錨點，套用時自動挑比對得到的那一組"
             if tip:
                 target.setToolTip(tip)
             self.table.setItem(row, self.COL_TARGET, target)

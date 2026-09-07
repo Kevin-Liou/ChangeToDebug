@@ -60,6 +60,22 @@ MIN_BASE_SIMILARITY = 0.5
 
 
 @dataclass
+class Anchor:
+    """規則的另一組錨點：同一個修改在另一個上游版本上的 old_code / new_code。
+
+    上游改到規則要改的那一段、使用者在合併工具裡解決衝突之後，工具會把解好的結果
+    以「新增一組錨點」寫回 profile，而不是覆蓋原本的 old_code——覆蓋會讓還沒跟上
+    上游的那些樹套不上。套用時逐組嘗試，哪一組比對得到就用哪一組。
+    """
+
+    old_code: str = ""
+    new_code: str = ""
+    base_file: str = ""                 # 相對於 profile 套件 base/ 目錄；空字串代表沒有 base
+    covers: list = field(default_factory=list)   # 這份 base 取自哪個檔案（相對專案根目錄）
+    note: str = ""
+
+
+@dataclass
 class Rule:
     """一條修補規則。對應 profile YAML 中 modifications / platform_pcd_modifications 的一筆。"""
 
@@ -77,6 +93,7 @@ class Rule:
     source: str = "modifications"       # modifications / platform_pcd_modifications / new_files
     new_file_source: str = ""           # 有值代表這是「新增檔案」規則，值為來源檔絕對路徑
     overwrite: bool = False             # 新增檔案時，目標已存在且內容不同是否覆蓋
+    anchors: list = field(default_factory=list)   # 額外的錨點（Anchor），規則本身是第一組
 
     @property
     def is_new_file(self):
@@ -85,6 +102,20 @@ class Rule:
     @property
     def target_display(self):
         return self.sub_path or self.file_name or "(未指定)"
+
+    def variants(self):
+        """依序回傳每一組錨點對應的「單錨點規則」：規則本身在前，再依 anchors 順序。
+
+        回傳的每一個都是沒有 anchors 的 Rule，方便沿用單錨點的套用流程。
+        """
+        if not self.anchors:
+            return [self]
+        primary = dataclasses.replace(self, anchors=[])
+        out = [primary]
+        for anchor in self.anchors:
+            out.append(dataclasses.replace(primary, old_code=anchor.old_code,
+                                           new_code=anchor.new_code))
+        return out
 
 
 @dataclass
@@ -239,8 +270,67 @@ class PatchEngine:
         return len(self._backed_up)
 
     # ---- 單一規則 ----
-    def apply(self, file_path, rule, base_ref=None, reverse=False):
-        """套用一條規則。
+    def apply(self, file_path, rule, base_ref=None, reverse=False, anchor_refs=()):
+        """套用一條規則；有多組錨點時自動挑能用的那一組。
+
+        anchor_refs 與 rule.anchors 對齊，是每組額外錨點各自的 base（沒有就放 None）。
+
+        挑選順序：
+          1. 逐組做精確比對（含「已套用過」的判斷），第一組命中的就用——絕大多數
+             情況在這裡就結束，成本與單錨點相同。
+          2. 全部比對不到，才依各組 base 與現況的相似度由高到低嘗試 3-way merge。
+             最像的 base 才是這個檔案真正的祖先，用它合出來的結果（或衝突）才有意義；
+             一旦某組給出結果（合併成功或衝突）就停，不再拿更不像的 base 硬合。
+          3. 全部都不行，用第一組走一次正常流程，讓它輸出「找不到片段」與診斷。
+        """
+        variants = rule.variants()
+        if len(variants) == 1:
+            return self._apply_single(file_path, rule, base_ref, reverse)
+
+        label = rule.label or rule.target_display
+        path = str(file_path)
+        if rule.is_new_file or not os.path.isfile(path):
+            return self._apply_single(path, variants[0], base_ref, reverse)
+        try:
+            norm = normalize_newlines(read_text(path)[0])
+        except Exception:
+            return self._apply_single(path, variants[0], base_ref, reverse)
+
+        # 1) 精確比對
+        for index, variant in enumerate(variants):
+            if _variant_hits(norm, variant, reverse):
+                if index:
+                    note = rule.anchors[index - 1].note
+                    self.logger.info(f"使用第 {index + 1} 組錨點"
+                                     f"{'（' + note + '）' if note else ''}：{label}")
+                return self._apply_single(path, variant, None, reverse)
+
+        # 2) 3-way merge，base 最像現況的先
+        refs = [base_ref] + list(anchor_refs)
+        refs += [None] * (len(variants) - len(refs))
+        ranked = []
+        for index, (variant, ref) in enumerate(zip(variants, refs)):
+            if ref is None:
+                continue
+            base_text = ref.read()
+            if base_text is None:
+                continue
+            similarity = difflib.SequenceMatcher(
+                None, base_text.split("\n"), norm.split("\n")).quick_ratio()
+            ranked.append((similarity, index, variant, ref))
+        for similarity, index, variant, ref in sorted(ranked, key=lambda r: (-r[0], r[1])):
+            result = self._apply_single(path, variant, ref, reverse, quiet_not_found=True)
+            if result.status != STATUS_NOT_FOUND:
+                if index:
+                    self.logger.info(f"以第 {index + 1} 組錨點的 base 做三方合併：{label}")
+                return result
+
+        # 3) 全部失敗
+        return self._apply_single(path, variants[0], None, reverse)
+
+    def _apply_single(self, file_path, rule, base_ref=None, reverse=False,
+                      quiet_not_found=False):
+        """套用一條單錨點規則。
 
         base_ref 有值時（profile 帶了 base 快照），exact 比對失敗會改用 3-way merge：
         以 base 為共同起點，判斷上游改的是不是我們要改的地方。
@@ -327,10 +417,12 @@ class PatchEngine:
                 if merged is not None:
                     return merged
 
-            self.logger.warn(f"找不到指定片段：{file_path}  ({label})")
-            if self.diagnose and not rule.regex:
-                from .diagnose import explain
-                self.logger.warn(explain(norm, old))
+            # 多錨點逐組嘗試時，中間那幾組比對不到是預期中的事，不要每組都叫一次
+            if not quiet_not_found:
+                self.logger.warn(f"找不到指定片段：{file_path}  ({label})")
+                if self.diagnose and not rule.regex:
+                    from .diagnose import explain
+                    self.logger.warn(explain(norm, old))
             return PatchResult(file_path, STATUS_NOT_FOUND, "找不到指定片段",
                                rule.rule_id, label)
 
@@ -630,6 +722,18 @@ def _apply_rule_to_text(text, rule):
         return text, 0
     count = text.count(old)
     return (text.replace(old, new) if count else text), count
+
+
+def _variant_hits(norm, rule, reverse):
+    """這組錨點在文字裡比對得到嗎（含已經是套用後的樣子）。只做便宜的探測，不套用。"""
+    old = normalize_newlines(rule.new_code if reverse else rule.old_code)
+    new = normalize_newlines(rule.old_code if reverse else rule.new_code)
+    if not old:
+        return False
+    if rule.regex:
+        return _matches(old, norm) or (bool(rule.regex_applied_check)
+                                       and _matches(rule.regex_applied_check, norm))
+    return old in norm or (bool(new) and new in norm)
 
 
 def _matches(pattern, text):

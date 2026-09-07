@@ -42,7 +42,6 @@
 #include <GpioV2Pad.h>
 #include <Nvl/Pch/GpioV2PinsNvlPchS.h>
 #include <HpPlatformId.h>
-#include <HpVpinSelection.h>
 
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -82,6 +81,17 @@
 
 #define R_PCIE_CFG_LCAP             0x4C    // Link Capabilities
 #define N_PCIE_CFG_LCAP_PN          24      // Link Capabilities Port Number field
+
+//
+// HPGP_GFX_ID[2:0] reports which option card is installed on the PCIe x16 slot.
+//
+#define HPGP_GFX_ID0                GPIOV2_NVL_PCH_S_GPP_B_7
+#define HPGP_GFX_ID1                GPIOV2_NVL_PCH_S_GPP_B_8
+#define HPGP_GFX_ID2                GPIOV2_NVL_PCH_S_GPP_B_9
+
+#define OPTION_CARD_NONE            0x00    // No option card
+#define OPTION_CARD_BOPPER          0x02    // RTX5050 50W GN22-X2 8GB - dGPU
+#define OPTION_CARD_BABBAGE         0x03    // 1x M.2 SSD Adapter      - M.2 SSD 3
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Local Structure Type Definitions
@@ -171,7 +181,6 @@ static HP_BOOT_ORDER_PLATFORM_INFO_NODE  DefaultUefiBootOrder[] =
   NVME_ON_PEG_M2_SLOT (4, M2_SSD2_STR, PCIESSD_PRIORITY + 1)             // HDD: "M.2 SSD 2:" - CPU PCIe root port 6 (Device 6) J40
 
   // STORAGE_ON_PCIE_SLOT(0, PCIE_BY_4_1_STR, PCIESSD_PRIORITY+3)           // HDD: "PCI Express x4 Slot 1:" - PCIE port 0 (1C 00)
-  EX_NETWORK_ON_PCIE_PORT_UEFI(0, NETWORK_STR, NETWORK_PRIORITY+2)          // NETWORK IPV4/IPV6: "NETWORK BOOT:" External LAN (1C 00)
   NETWORK_GBE_UEFI(NETWORK_STR, NETWORK_PRIORITY)                           // NETWORK IPV4/IPV6: "NETWORK BOOT:" External LAN (1F 06)
   // EMMC_CONTROLLER(EMMC_STR, EMMC_PRIORITY)                               // HP_AED: "HP_AED:" - PCIE EMMC (1A 00)
 };
@@ -182,10 +191,44 @@ static HP_BOOT_ORDER_PLATFORM_INFO_NODE  ThirdSsdUefiBootOrder[] =
   NVME_ON_PEG_M2_SLOT (3, M2_SSD1_STR, PCIESSD_PRIORITY)                 // HDD: "M.2 SSD 1:" - CPU PCIe root port 5 (Device 6) J39
   NVME_ON_PEG_M2_SLOT (4, M2_SSD2_STR, PCIESSD_PRIORITY + 1)             // HDD: "M.2 SSD 2:" - CPU PCIe root port 6 (Device 6) J40
   NVME_ON_PEG_M2_SLOT (2, M2_SSD3_STR, PCIESSD_PRIORITY + 2)             // HDD: "M.2 SSD 3:" - CPU PCIe root port 3 (Device 6) Babbage option card
-
-  EX_NETWORK_ON_PCIE_PORT_UEFI(0, NETWORK_STR, NETWORK_PRIORITY+2)       // NETWORK IPV4/IPV6: "NETWORK BOOT:" External LAN (1C 00)
-  NETWORK_GBE_UEFI(NETWORK_STR, NETWORK_PRIORITY)                        // NETWORK IPV4/IPV6: "NETWORK BOOT:" External LAN (1F 06)
+  
+  NETWORK_GBE_UEFI(NETWORK_STR, NETWORK_PRIORITY)                           // NETWORK IPV4/IPV6: "NETWORK BOOT:" External LAN (1F 06)
 };
+
+// ********************************************************************************************************************
+// Function:  IsThirdSsdCardInstalled
+//
+// Summary:
+//   Report whether the Babbage "1x M.2 SSD Adapter" option card is installed on the PCIe x16 slot.
+//   Only Manaan PG boards carry the option card connector, Manaan P and Manaan M do not.
+//
+//
+// Parameters:
+//   VOID
+//
+// Function Returns:  TRUE when the third M.2 SSD is present in the boot order, FALSE otherwise
+// ********************************************************************************************************************
+STATIC
+BOOLEAN
+IsThirdSsdCardInstalled (
+  VOID
+  )
+{
+  UINT8  OptionCardId;
+
+  if (PcdGet16 (PcdDtPcaId) != BOARD_ID_DM800_PG)
+  {
+    return FALSE;
+  }
+
+  OptionCardId = (UINT8)((HpGpioRead (HPGP_GFX_ID2) << 2) |
+                         (HpGpioRead (HPGP_GFX_ID1) << 1) |
+                         HpGpioRead (HPGP_GFX_ID0));
+
+  DEBUG ((BOOTORDER_ERR_LVL, "[IsThirdSsdCardInstalled] HPGP_GFX_ID[2:0] = %x \n", OptionCardId));
+
+  return (BOOLEAN)(OptionCardId == OPTION_CARD_BABBAGE);
+}
 
 // ********************************************************************************************************************
 // Function:  InstallPlatformDefaultData

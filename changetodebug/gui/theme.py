@@ -10,6 +10,109 @@ Gruvbox、Catppuccin、Tokyo Night、Monokai、Rosé Pine），色碼皆為各�
 """
 
 
+import tempfile
+from pathlib import Path
+
+#: 已產生的箭頭圖快取：(色碼, 是否朝上) -> 檔案路徑
+_ARROW_CACHE = {}
+
+#: 箭頭圖的形狀版本。改變畫法時一併改這裡，才不會沿用到舊的暫存檔。
+_ARROW_TAG = "v1"
+
+
+def _arrow_image(color, up=False):
+    """畫一個三角形箭頭存成 PNG，回傳可放進 QSS url() 的路徑；失敗時回空字串。
+
+    QSS 一旦接管 QComboBox::drop-down 或 QSpinBox 的上下按鈕，Qt 就不再畫原生
+    箭頭；而 CSS 常見的「透明邊框三角形」技巧在 Qt 只會畫成長方形（實測），所以
+    只能用圖片。三角形四周留白，顯示大小由 QSS 的 width/height 決定。以 2 倍
+    尺寸繪製再讓 QSS 縮回，邊緣才不會有鋸齒。
+    """
+    key = (color, up)
+    if key in _ARROW_CACHE:
+        return _ARROW_CACHE[key]
+    path = ""
+    try:
+        from PyQt5.QtCore import QPointF, Qt
+        from PyQt5.QtGui import QColor, QImage, QPainter, QPolygonF
+
+        w, h, pad, s = 9, 6, 5, 2
+        img = QImage((w + pad * 2) * s, (h + pad * 2) * s, QImage.Format_ARGB32)
+        img.fill(Qt.transparent)
+        painter = QPainter(img)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(color))
+        x, y = pad * s, pad * s
+        pts = ([QPointF(x, y + h * s), QPointF(x + w * s, y + h * s),
+                QPointF(x + w * s / 2, y)] if up else
+               [QPointF(x, y), QPointF(x + w * s, y),
+                QPointF(x + w * s / 2, y + h * s)])
+        painter.drawPolygon(QPolygonF(pts))
+        painter.end()
+        name = f"ChangeToDebug_arrow_{_ARROW_TAG}_{'up' if up else 'down'}_{color.lstrip('#')}.png"
+        target = Path(tempfile.gettempdir()) / name
+        if img.save(str(target)):
+            path = target.as_posix()
+    except Exception:
+        # 產圖失敗只會讓箭頭不見，功能不受影響，不值得讓整個程式起不來
+        path = ""
+    _ARROW_CACHE[key] = path
+    return path
+
+
+def _arrow_rules(c):
+    """下拉與微調箭頭的 QSS。產圖失敗就整段不輸出，維持舊行為（沒有箭頭）。"""
+    down, up = _arrow_image(c["subtext"]), _arrow_image(c["subtext"], up=True)
+    down_off = _arrow_image(c["disabled"]) or down
+    up_off = _arrow_image(c["disabled"], up=True) or up
+    if not (down and up):
+        return ""
+    return f"""
+QComboBox::down-arrow {{
+    image: url("{down}");
+    width: 19px;
+    height: 16px;
+}}
+QComboBox::down-arrow:disabled {{
+    image: url("{down_off}");
+}}
+
+/* QSpinBox 的上下按鈕同樣被 QSS 接管；不畫的話會露出兩個空的原生方框，
+   而且會突出到圓角外面。 */
+QSpinBox::up-button, QSpinBox::down-button {{
+    background: transparent;
+    border: none;
+    subcontrol-origin: border;
+    width: 17px;
+}}
+QSpinBox::up-button {{
+    subcontrol-position: top right;
+    margin: 3px 4px 0 0;
+}}
+QSpinBox::down-button {{
+    subcontrol-position: bottom right;
+    margin: 0 4px 3px 0;
+}}
+QSpinBox::up-arrow {{
+    image: url("{up}");
+    width: 15px;
+    height: 12px;
+}}
+QSpinBox::down-arrow {{
+    image: url("{down}");
+    width: 15px;
+    height: 12px;
+}}
+QSpinBox::up-arrow:disabled, QSpinBox::up-arrow:off {{
+    image: url("{up_off}");
+}}
+QSpinBox::down-arrow:disabled, QSpinBox::down-arrow:off {{
+    image: url("{down_off}");
+}}
+"""
+
+
 def _theme(label, kind, **colors):
     colors["label"] = label
     colors["kind"] = kind
@@ -270,8 +373,9 @@ QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled, QPlainTextEdit:disabl
 }}
 QComboBox::drop-down {{
     border: none;
-    width: 20px;
+    width: 22px;
 }}
+{_arrow_rules(c)}
 QComboBox QAbstractItemView {{
     background: {c['surface']};
     border: 1px solid {c['border']};

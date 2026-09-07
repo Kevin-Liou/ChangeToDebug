@@ -67,60 +67,42 @@ entries:
   source: org
   sha256: 8834c273ea9efde2513635c35ba4042e0d50761114232484b5be2b0230e17417
 - rule_id: mod:7
-  label: ExpansionSlots.c
-  sub_path: HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/ExpansionSlotLib/ExpansionSlots.c
-  base_file: HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/ExpansionSlotLib/ExpansionSlots.c
-  source: org
-  sha256: 22b9fbced6aca0e2508bf9c71f66e258c45b807d76c6f14dbd69d40598c33612
-- rule_id: mod:8
-  label: ExpansionSlots.c 修改 2
-  sub_path: HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/ExpansionSlotLib/ExpansionSlots.c
-  base_file: HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/ExpansionSlotLib/ExpansionSlots.c
-  source: org
-  sha256: 22b9fbced6aca0e2508bf9c71f66e258c45b807d76c6f14dbd69d40598c33612
-- rule_id: mod:9
-  label: ExpansionSlots.c 修改 3
-  sub_path: HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/ExpansionSlotLib/ExpansionSlots.c
-  base_file: HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/ExpansionSlotLib/ExpansionSlots.c
-  source: org
-  sha256: 22b9fbced6aca0e2508bf9c71f66e258c45b807d76c6f14dbd69d40598c33612
-- rule_id: mod:10
   label: PlatformBootOrderLib.c
   sub_path: HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.c
   base_file: HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.c
-  source: org
-  sha256: 46db5b2931d670c72e5817e1a24b23afd23dcede42873a9aa041eb41f93fe60e
-- rule_id: mod:11
+  source: extracted
+  sha256: b0a404e194b22c2d338f340ff30aa719fc77428f4742fcebcdc6f79f8663f68e
+- rule_id: mod:8
   label: Z21ManaanPkgConfig.dsc
   sub_path: HpPlatformPkg/MultiProject/Z21ManaanPkg/Z21ManaanPkgConfig.dsc
   base_file: HpPlatformPkg/MultiProject/Z21ManaanPkg/Z21ManaanPkgConfig.dsc
   source: org
   sha256: 27eeffe84f43d814e11a0c1f1c713ebeca65e415f0e85a34256cdf719475fbb6
-- rule_id: mod:12
+- rule_id: mod:9
   label: ExpansionSlotLib.inf
   sub_path: HpPlatformPkg/MultiProject/Z22MekrosPkg/Library/ExpansionSlotLib/ExpansionSlotLib.inf
   base_file: HpPlatformPkg/MultiProject/Z22MekrosPkg/Library/ExpansionSlotLib/ExpansionSlotLib.inf
   source: org
   sha256: 7079880991f1ce4323be923c892be1023d0c2dfba4b7e357bb3eba160eb5940e
-- rule_id: mod:13
+- rule_id: mod:10
   label: ExpansionSlots.c
   sub_path: HpPlatformPkg/MultiProject/Z22MekrosPkg/Library/ExpansionSlotLib/ExpansionSlots.c
   base_file: HpPlatformPkg/MultiProject/Z22MekrosPkg/Library/ExpansionSlotLib/ExpansionSlots.c
   source: org
   sha256: 7f67a1bca14df6fd77e6b44534973e6cee5e8c6ee0fc43a48fac2edfe685e51f
-- rule_id: mod:14
+- rule_id: mod:11
   label: ExpansionSlots.c 修改 2
   sub_path: HpPlatformPkg/MultiProject/Z22MekrosPkg/Library/ExpansionSlotLib/ExpansionSlots.c
   base_file: HpPlatformPkg/MultiProject/Z22MekrosPkg/Library/ExpansionSlotLib/ExpansionSlots.c
   source: org
   sha256: 7f67a1bca14df6fd77e6b44534973e6cee5e8c6ee0fc43a48fac2edfe685e51f
-- rule_id: mod:15
+- rule_id: mod:12
   label: PlatformBootOrderLib.c
   sub_path: HpPlatformPkg/MultiProject/Z22MekrosPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.c
   base_file: HpPlatformPkg/MultiProject/Z22MekrosPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.c
   source: org
   sha256: 1e6efa7ab1a82455fd14109e6f39b7db8b2568ec9b38e3e2daa345f8bb460a51
-- rule_id: mod:16
+- rule_id: mod:13
   label: Z22MekrosPkgConfig.dsc
   sub_path: HpPlatformPkg/MultiProject/Z22MekrosPkg/Z22MekrosPkgConfig.dsc
   base_file: HpPlatformPkg/MultiProject/Z22MekrosPkg/Z22MekrosPkgConfig.dsc
@@ -191,7 +173,7 @@ entries:
   file_name: PlatformBootOrderLib.inf
   base_file: HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.inf
   source: org
-  sha256: ea1df7ef24e7668976939ade71389d9fb37e1025e086aa7cb41fcfebbcd0056d
+  sha256: 5b4b7aa420559f114d453c9404debefc7cb9a7394b5871dd1054d4edb0617fc7
   covers:
   - HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.inf
   - HpPlatformPkg/MultiProject/Z22MekrosPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.inf

@@ -170,7 +170,8 @@ class PatchSetTask(Task):
                 else:
                     result = ctx.engine.apply(file_path, rule,
                                               self._base_ref(ctx, rule, file_path),
-                                              reverse=ctx.revert)
+                                              reverse=ctx.revert,
+                                              anchor_refs=self._anchor_refs(ctx, rule, file_path))
                 group_results.append(result)
                 done += 1
                 ctx.progress(done, total)
@@ -217,6 +218,16 @@ class PatchSetTask(Task):
         if snapshot is None or not snapshot.available:
             return None
         return snapshot.base_for(rule.rule_id, str(file_path))
+
+    @staticmethod
+    def _anchor_refs(ctx, rule, file_path):
+        """每組額外錨點各自的 base，與 rule.anchors 對齊；拿不到的放 None。"""
+        if not rule.anchors:
+            return []
+        snapshot = getattr(ctx.profile, "base_snapshot", None)
+        if not ctx.merge_fallback or snapshot is None or not snapshot.root:
+            return [None] * len(rule.anchors)
+        return [snapshot.anchor_base(anchor, str(file_path)) for anchor in rule.anchors]
 
     # ---- 展開成 (檔案, 規則) 工作清單 ----
     def _collect_jobs(self, ctx, profile, base, enabled_ids, stats, projects=None):

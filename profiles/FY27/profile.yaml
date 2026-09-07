@@ -203,115 +203,47 @@ modifications:
 
       [Guids]
 
-# ----------------------------------------------------------
-  - sub_path: 'HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/ExpansionSlotLib/ExpansionSlots.c'
-    label: 'ExpansionSlots.c'
-    option_debug_flag: false
-    old_code: |2
+    anchors:
+      - old_code: |2+
 
-      #include <Nvl/Pch/GpioV2PinsNvlPchS.h>
-      #include <PlatformDefinitions.h>
-      #include <HpPlatformId.h>
+             HpGpioLib
+             PcdLib
+             HpVpinSelectionLib
 
-      #define HPGP_GFX_ID0            GPIOV2_NVL_PCH_S_GPP_B_7
-      #define HPGP_GFX_ID1            GPIOV2_NVL_PCH_S_GPP_B_8
-    new_code: |2
+          [Guids]
 
-      #include <Nvl/Pch/GpioV2PinsNvlPchS.h>
-      #include <PlatformDefinitions.h>
-      #include <HpPlatformId.h>
+        new_code: |2+
 
-      //
-      // Keep this last. It takes over the DEBUG() macro so the messages in this file are emitted
-      // even in a RELEASE build, where MDEPKG_NDEBUG would normally compile them away and DebugLib
-      // is the Null instance. Delete the line to make this file quiet again.
-      //
-      #include <Library/HpForceDebugLib.h>
+             HpGpioLib
+             PcdLib
+             HpVpinSelectionLib
+             HpForceDebugLib
 
-      #define HPGP_GFX_ID0            GPIOV2_NVL_PCH_S_GPP_B_7
-      #define HPGP_GFX_ID1            GPIOV2_NVL_PCH_S_GPP_B_8
-# ----------------------------------------------------------
-  - sub_path: 'HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/ExpansionSlotLib/ExpansionSlots.c'
-    label: 'ExpansionSlots.c 修改 2'
-    option_debug_flag: false
-    old_code: |2
+          [Guids]
 
-      {
-         UINT8  OptionCardId;
+        note: "20260907 於 HpNvlPlat4 解決衝突後新增"
+        base_file: "_anchors/20260907121252/HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/ExpansionSlotLib/ExpansionSlotLib.inf"
+        covers:
+          - "HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/ExpansionSlotLib/ExpansionSlotLib.inf"
 
-         if (PcdGet16 (PcdDtPcaId) != BOARD_ID_DM800_PG)
-         {
-            return FALSE;
-         }
 
-         OptionCardId = (UINT8)((HpGpioRead (HPGP_GFX_ID2) << 2) |
-                                (HpGpioRead (HPGP_GFX_ID1) << 1) |
-                                HpGpioRead (HPGP_GFX_ID0));
-
-         return (BOOLEAN)(OptionCardId == OPTION_CARD_BABBAGE);
-      }
-    new_code: |2
-
-      {
-         UINT8  OptionCardId;
-
-         DEBUG ((DEBUG_INFO, "[HpForceDebug][ExpansionSlots] IsThirdSsdCardInstalled: PcdDtPcaId = 0x%04x (PG = 0x%02x)\n",
-                 PcdGet16 (PcdDtPcaId), BOARD_ID_DM800_PG));
-
-         if (PcdGet16 (PcdDtPcaId) != BOARD_ID_DM800_PG)
-         {
-            DEBUG ((DEBUG_INFO, "[HpForceDebug][ExpansionSlots] Not a Manaan PG board - no option card connector\n"));
-            return FALSE;
-         }
-
-         OptionCardId = (UINT8)((HpGpioRead (HPGP_GFX_ID2) << 2) |
-                                (HpGpioRead (HPGP_GFX_ID1) << 1) |
-                                HpGpioRead (HPGP_GFX_ID0));
-
-         DEBUG ((DEBUG_INFO, "[HpForceDebug][ExpansionSlots] Option card ID = 0x%02x, third M.2 SSD %a\n",
-                 OptionCardId,
-                 (OptionCardId == OPTION_CARD_BABBAGE) ? "present" : "absent"));
-
-         return (BOOLEAN)(OptionCardId == OPTION_CARD_BABBAGE);
-      }
-# ----------------------------------------------------------
-  - sub_path: 'HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/ExpansionSlotLib/ExpansionSlots.c'
-    label: 'ExpansionSlots.c 修改 3'
-    option_debug_flag: false
-    old_code: |2
-
-         VOID
-         )
-      {
-         if (IsThirdSsdCardInstalled ())
-         {
-            return mSlotDefinitionWithThirdSsd;
-    new_code: |2
-
-         VOID
-         )
-      {
-         DEBUG ((DEBUG_INFO, "[HpForceDebug][ExpansionSlots] GetSlotDefinition called\n"));
-         if (IsThirdSsdCardInstalled ())
-         {
-            return mSlotDefinitionWithThirdSsd;
 # ----------------------------------------------------------
   - sub_path: 'HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.c'
     label: 'PlatformBootOrderLib.c'
     option_debug_flag: false
     old_code: |2
 
-      #include <GpioV2Pad.h>
       #include <Nvl/Pch/GpioV2PinsNvlPchS.h>
       #include <HpPlatformId.h>
+      #include <HpVpinSelection.h>
 
 
       // ---------------------------------------------------------------------------------------------------------------------
     new_code: |2
 
-      #include <GpioV2Pad.h>
       #include <Nvl/Pch/GpioV2PinsNvlPchS.h>
       #include <HpPlatformId.h>
+      #include <HpVpinSelection.h>
 
       //
       // Keep this last. It takes over the DEBUG() macro so the messages in this file are emitted
@@ -322,6 +254,35 @@ modifications:
 
 
       // ---------------------------------------------------------------------------------------------------------------------
+    anchors:
+      - old_code: |2
+
+          #include <GpioV2Pad.h>
+          #include <Nvl/Pch/GpioV2PinsNvlPchS.h>
+          #include <HpPlatformId.h>
+
+
+          // ---------------------------------------------------------------------------------------------------------------------
+        new_code: |2
+
+          #include <GpioV2Pad.h>
+          #include <Nvl/Pch/GpioV2PinsNvlPchS.h>
+          #include <HpPlatformId.h>
+
+          //
+          // Keep this last. It takes over the DEBUG() macro so the messages in this file are emitted
+          // even in a RELEASE build, where MDEPKG_NDEBUG would normally compile them away and DebugLib
+          // is the Null instance. Delete the line to make this file quiet again.
+          //
+          #include <Library/HpForceDebugLib.h>
+
+
+          // ---------------------------------------------------------------------------------------------------------------------
+        note: "由 2026-09-07 11:13 舊版覆蓋式重新錨定的內容轉換而來（HpNvlPlat4 解衝突結果）"
+        base_file: "_anchors/20260907114715/HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.c"
+        covers:
+          - "HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.c"
+
 # ----------------------------------------------------------
   - sub_path: 'HpPlatformPkg/MultiProject/Z21ManaanPkg/Z21ManaanPkgConfig.dsc'
     label: 'Z21ManaanPkgConfig.dsc'
@@ -389,7 +350,7 @@ modifications:
          #
          DEFINE HP_DEBUG_LOG_BIOS = TRUE
          DEFINE HP_DEBUG_LOG_ACPI = TRUE
-         DEFINE HP_DEBUG_LOG_POST = TRUE
+         DEFINE HP_DEBUG_LOG_POST = FALSE
 
          #
          # Opens up RtsCallbackHandler Pei/Dxe/Smm (and the rest of HpFeatureErrorHandling, which
@@ -578,7 +539,7 @@ modifications:
          #
          DEFINE HP_DEBUG_LOG_BIOS = TRUE
          DEFINE HP_DEBUG_LOG_ACPI = TRUE
-         DEFINE HP_DEBUG_LOG_POST = TRUE
+         DEFINE HP_DEBUG_LOG_POST = FALSE
 
          #
          # Opens up RtsCallbackHandler Pei/Dxe/Smm (and the rest of HpFeatureErrorHandling, which
@@ -863,6 +824,29 @@ platform_pcd_modifications:
 
       [Pcd]
          gEfiHpStoragePkgTokenSpaceGuid.PcdHpStoragePlaceHolderSupport
+    anchors:
+      - old_code: |2
+
+             PcdLib
+             PciSegmentLib
+             HpVpinSelectionLib
+
+          [Pcd]
+             gEfiHpStoragePkgTokenSpaceGuid.PcdHpStoragePlaceHolderSupport
+        new_code: |2
+
+             PcdLib
+             PciSegmentLib
+             HpVpinSelectionLib
+             HpForceDebugLib
+
+          [Pcd]
+             gEfiHpStoragePkgTokenSpaceGuid.PcdHpStoragePlaceHolderSupport
+        note: "由 2026-09-07 11:13 舊版覆蓋式重新錨定的內容轉換而來（HpNvlPlat4 解衝突結果）"
+        base_file: "_anchors/20260907114715/HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.inf"
+        covers:
+          - "HpPlatformPkg/MultiProject/Z21ManaanPkg/Library/PlatformBootOrderLib/PlatformBootOrderLib.inf"
+
 # ----------------------------------------------------------
   - file_name: 'DriverEntry.c'
     label: 'DriverEntry.c'

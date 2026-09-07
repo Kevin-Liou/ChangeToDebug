@@ -77,6 +77,78 @@ class BaseSnapshot:
         return {rid: item.get("reason", "未記錄原因")
                 for rid, item in self.entries.items() if not item.get("base_file")}
 
+    def realign(self, rules):
+        """讓 manifest 的項目跟上 profile 現在的規則編號。
+
+        manifest 以 rule_id（mod:N）當 key，而 N 是規則在 YAML 裡的位置——使用者刪掉
+        或搬動一條規則，後面所有規則的編號都會改變，manifest 就會把 base 配給錯的規則，
+        而 3-way merge 拿錯的 base 去合，結果只會是垃圾。項目裡另外記了 sub_path /
+        file_name / label，這裡用它們認人，重新對回正確的 rule_id。
+
+        回傳說明訊息清單；空清單代表本來就對。只改記憶體中的對應，不寫檔。
+        """
+        if not self.entries:
+            return []
+
+        def identity(sub_path, file_name, label):
+            return (str(sub_path or "").replace("\\", "/"), str(file_name or ""),
+                    str(label or ""))
+
+        def matches(entry, rule):
+            # 有記路徑就要路徑相同；label 一律要相同
+            if entry.get("sub_path") and identity(entry.get("sub_path"), "", "")[0] \
+                    != identity(rule.sub_path, "", "")[0]:
+                return False
+            if entry.get("file_name") and str(entry.get("file_name")) != rule.file_name:
+                return False
+            return str(entry.get("label") or "") == str(rule.label or "")
+
+        notes, new_entries, claimed = [], {}, set()
+        for rule in rules:
+            entry = self.entries.get(rule.rule_id)
+            if entry is not None and matches(entry, rule):
+                new_entries[rule.rule_id] = entry
+                claimed.add(id(entry))
+                continue
+            found = next((e for e in self.entries.values()
+                          if id(e) not in claimed and matches(e, rule)), None)
+            if found is None:
+                if entry is not None:
+                    notes.append(f"{rule.rule_id}（{rule.label}）在 manifest 裡對到的是"
+                                 f"「{entry.get('label')}」，且找不到它自己的紀錄，視為沒有 base")
+                continue
+            old_id = found.get("rule_id", "?")
+            found["rule_id"] = rule.rule_id
+            new_entries[rule.rule_id] = found
+            claimed.add(id(found))
+            notes.append(f"{old_id} -> {rule.rule_id}　{rule.label}")
+
+        dropped = [e for e in self.entries.values() if id(e) not in claimed]
+        for entry in dropped:
+            notes.append(f"移除已不存在的規則的紀錄：{entry.get('rule_id')}　{entry.get('label')}")
+
+        self.entries = new_entries
+        return notes
+
+    def orphan_base_files(self):
+        """base/ 底下沒有任何 manifest 項目引用的檔案（realign 移除項目後可能出現）。"""
+        root = Path(self.root)
+        if not root.is_dir():
+            return []
+        referenced = set()
+        for entry in self.entries.values():
+            if entry.get("base_file"):
+                referenced.add((root / str(entry["base_file"]).replace("\\", "/")).resolve())
+        orphans = []
+        for path in root.rglob("*"):
+            if not path.is_file() or ".bak." in path.name:
+                continue
+            if "_anchors" in path.relative_to(root).parts:
+                continue        # 錨點的 base 由 profile.yaml 引用，不在 manifest 裡
+            if path.resolve() not in referenced:
+                orphans.append(path)
+        return orphans
+
     def base_for(self, rule_id, target_path=""):
         """取得某條規則的 base 檔案；沒有就回 None。
 
@@ -98,6 +170,24 @@ class BaseSnapshot:
             approximate = not any(target.endswith(str(c).replace("\\", "/")) for c in covers)
         return BaseRef(str(path), item.get("source", ""), approximate,
                        item.get("representative", ""))
+
+    def anchor_base(self, anchor, target_path=""):
+        """取得某組額外錨點的 base；錨點沒帶 base 或檔案不在就回 None。
+
+        錨點的 base 是在某一個特定檔案上解決衝突時存下來的，covers 記錄那個檔案。
+        目標不是那個檔案時標記 approximate，讓上層知道這份 base 是借來的。
+        """
+        if not anchor.base_file or not self.root:
+            return None
+        path = Path(self.root) / str(anchor.base_file).replace("\\", "/")
+        if not path.is_file():
+            return None
+        approximate = False
+        if anchor.covers and target_path:
+            target = str(target_path).replace("\\", "/")
+            approximate = not any(target.endswith(str(c).replace("\\", "/"))
+                                  for c in anchor.covers)
+        return BaseRef(str(path), "anchor", approximate, "")
 
 
 # ---------------------------------------------------------------- manifest 讀寫

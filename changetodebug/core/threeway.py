@@ -31,6 +31,10 @@ class Conflict:
 class MergeResult:
     lines: list = field(default_factory=list)
     conflicts: list = field(default_factory=list)
+    #: 依序記錄合併結果的組成：("text", [行...]) 或 ("conflict", Conflict)。
+    #: lines 在衝突處只放了我方版本當佔位，看起來像一份乾淨的結果；要產生帶衝突
+    #: 標記的檔案就必須知道衝突落在哪一段，所以走訪時一併記下來。
+    blocks: list = field(default_factory=list)
     took_ours: int = 0          # 只有我方改動的區段數
     took_theirs: int = 0        # 只有上游改動的區段數
     same: int = 0               # 兩邊改法相同的區段數
@@ -86,6 +90,16 @@ def merge(base, ours, theirs):
     result = MergeResult()
     base_pos = ours_pos = theirs_pos = 0
 
+    def keep(lines):
+        """把一段沒有爭議的內容同時記進 lines 與 blocks。"""
+        if not lines:
+            return
+        result.lines.extend(lines)
+        if result.blocks and result.blocks[-1][0] == "text":
+            result.blocks[-1][1].extend(lines)
+        else:
+            result.blocks.append(("text", list(lines)))
+
     for base_start, base_end, ours_start, ours_end, theirs_start, theirs_end in \
             _sync_regions(base, ours, theirs):
         base_chunk = base[base_pos:base_start]
@@ -95,25 +109,26 @@ def merge(base, ours, theirs):
         if ours_chunk or theirs_chunk or base_chunk:
             if ours_chunk == theirs_chunk:
                 # 兩邊做了相同的事（或都沒動）
-                result.lines.extend(ours_chunk)
+                keep(ours_chunk)
                 if ours_chunk != base_chunk:
                     result.same += 1
             elif ours_chunk == base_chunk:
                 # 只有上游改
-                result.lines.extend(theirs_chunk)
+                keep(theirs_chunk)
                 result.took_theirs += 1
             elif theirs_chunk == base_chunk:
                 # 只有我們改
-                result.lines.extend(ours_chunk)
+                keep(ours_chunk)
                 result.took_ours += 1
             else:
-                result.conflicts.append(Conflict(list(base_chunk), list(ours_chunk),
-                                                 list(theirs_chunk),
-                                                 line=len(result.lines) + 1))
+                conflict = Conflict(list(base_chunk), list(ours_chunk),
+                                    list(theirs_chunk), line=len(result.lines) + 1)
+                result.conflicts.append(conflict)
+                result.blocks.append(("conflict", conflict))
                 # 佔位用我方版本；有衝突時上層不會寫入這個檔案
                 result.lines.extend(ours_chunk)
 
-        result.lines.extend(base[base_start:base_end])
+        keep(base[base_start:base_end])
         base_pos, ours_pos, theirs_pos = base_end, ours_end, theirs_end
 
     return result
@@ -122,6 +137,61 @@ def merge(base, ours, theirs):
 def merge_text(base_text, ours_text, theirs_text):
     """文字版入口。輸入須先正規化換行為 \\n。"""
     return merge(base_text.split("\n"), ours_text.split("\n"), theirs_text.split("\n"))
+
+
+#: 衝突標記。與 git 的 diff3 格式一致，任何合併工具與純文字編輯器都認得。
+MARK_LEFT = "<<<<<<<"
+MARK_BASE = "|||||||"
+MARK_MID = "======="
+MARK_RIGHT = ">>>>>>>"
+
+MARKERS = (MARK_LEFT, MARK_BASE, MARK_MID, MARK_RIGHT)
+
+
+def render_conflicts(result, left_label="目前 source", right_label="profile 期望的修改",
+                     base_label="共同起點 (base 快照)"):
+    """把合併結果輸出成帶 diff3 衝突標記的文字。
+
+    左右順序刻意對齊 git 與合併工具的左右欄：左邊是專案裡現在的內容，右邊是
+    profile 想要的結果。注意本模組內部的 ours 是 profile、theirs 是目前 source，
+    與 git 的命名相反，所以這裡是 theirs 在前、ours 在後。
+
+    沒有 blocks（例如用舊版資料重建的 MergeResult）時退回 result.text，
+    至少不會產生空檔案。
+    """
+    if not result.blocks:
+        return result.text
+    out = []
+    for kind, payload in result.blocks:
+        if kind == "text":
+            out.extend(payload)
+            continue
+        out.append(f"{MARK_LEFT} {left_label}")
+        out.extend(payload.theirs)
+        out.append(f"{MARK_BASE} {base_label}")
+        out.extend(payload.base)
+        out.append(MARK_MID)
+        out.extend(payload.ours)
+        out.append(f"{MARK_RIGHT} {right_label}")
+    return "\n".join(out)
+
+
+def has_markers(text):
+    """文字裡還留著未解決的衝突標記嗎。
+
+    只認行首，而且必須同時出現 << 與 >> 兩端。BIOS source 裡常見的
+    ========================= 分隔線會命中單獨的 =======，只看它會把一份
+    已經解好的檔案誤判成還沒解完。
+    """
+    left = right = False
+    for line in text.split("\n"):
+        if line.startswith(MARK_LEFT):
+            left = True
+        elif line.startswith(MARK_RIGHT):
+            right = True
+        if left and right:
+            return True
+    return False
 
 
 def added_lines(old_text, new_text):

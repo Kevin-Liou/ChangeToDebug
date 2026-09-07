@@ -466,6 +466,18 @@ class MainWindow(QMainWindow):
                     f"　{source}")
 
         for profile in self.profiles:
+            notes = getattr(profile, "base_warnings", None) or []
+            if notes:
+                shown = "\n".join(f"　• {n}" for n in notes[:8])
+                if len(notes) > 8:
+                    shown += f"\n　…另有 {len(notes) - 8} 條"
+                self._append_log(
+                    "warn",
+                    f"{profile.key} 的 base manifest 與規則編號不一致（規則被刪除或搬動過），"
+                    "已依 sub_path / label 重新對應。建議重新「擷取 base 快照」讓檔案也對齊：\n"
+                    + shown)
+
+        for profile in self.profiles:
             dead = profile.dead_rules()
             if dead:
                 self._append_log(
@@ -728,12 +740,36 @@ class MainWindow(QMainWindow):
 
     def _resolve_conflicts(self):
         """用外部合併工具解決衝突，解完後讀回並寫入專案。"""
-        from ..core.conflicts import apply_all
+        from ..core.conflicts import apply_all, build_all_merged
 
         directory, records = self._conflict_records()
         if not records:
             QMessageBox.information(self, APP_NAME, "目前沒有待解決的衝突。")
             return
+
+        logger = Logger(sink=self._append_log, log_file=self.log_path, echo_stdout=False)
+
+        # 同一個檔案可能有多條規則各留一筆紀錄（舊版本的產物就是這樣），而它們指向
+        # 同一組檔案。不去重的話會把同一個檔案開兩次，套用時第二次也只會得到
+        # 「與目前內容相同」。
+        records = list({r.merged: r for r in records}.values())
+
+        # .merged 必須先存在合併工具才打得開——`code --merge` 的第四個參數是輸出檔，
+        # 檔案不存在時只會顯示「無法開啟編輯器，因為找不到檔案」。這裡順便讓舊的
+        # 衝突資料夾也能用：缺什麼就補什麼，已經解好的（非空）不動。
+        missing = build_all_merged(records, logger, overwrite=False)
+        if missing:
+            usable = [r for r in records if all(r is not bad for bad, _ in missing)]
+            if not usable:
+                self._append_log("error", "無法產生待解決的檔案，衝突資料可能已損壞或被刪除。")
+                QMessageBox.warning(
+                    self, APP_NAME,
+                    "無法產生待解決的檔案。\n\n"
+                    f"{missing[0][1]}\n\n"
+                    f"請確認這個資料夾還在：\n{directory}")
+                return
+            self._append_log("warn", f"有 {len(missing)} 個檔案無法產生待解決內容，已略過。")
+            records = usable
 
         command = self.settings.get("merge_tool_command", "code")
         # VS Code / Cursor 的 code 是 .cmd 批次檔，而 Windows 的 CreateProcess 不會套用
@@ -758,23 +794,34 @@ class MainWindow(QMainWindow):
                 f"無法啟動合併工具「{command}」。\n\n"
                 f"{failed[0][1]}\n\n"
                 "可在設定檔 ChangeToDebug_settings.json 的 merge_tool_command 指定路徑，\n"
-                f"或直接用任何工具編輯下列資料夾中的 .merged 檔案：\n{directory}")
+                "或直接用任何文字編輯器開啟下列資料夾中的 .merged 檔案，\n"
+                "檔案裡已經標好 <<<<<<< / ======= / >>>>>>> 三段，改完存檔即可：\n"
+                f"{directory}")
             QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
             return
 
+        # 部分失敗時原本什麼都不說，使用者會以為全部都開好了
+        for record, why in failed:
+            self._append_log("warn", f"這個檔案的合併工具沒開起來：{record.target} -> {why}")
+
         self._append_log("step", f"已開啟 {len(launched)} 個檔案的合併工具")
+        note = ""
+        if failed:
+            note = (f"\n另有 {len(failed)} 個檔案沒開起來，"
+                    "可以直接在資料夾裡編輯它們的 .merged。\n")
         confirm = QMessageBox.question(
             self, APP_NAME,
-            f"已在「{command}」開啟 {len(launched)} 個衝突檔案。\n\n"
-            "請在合併工具中解決衝突並**存檔**（結果會存成 .merged），\n"
-            "全部完成後按「套用」，工具會把結果寫回專案並重新驗證。\n\n"
-            "尚未解決或內容仍含衝突標記的檔案會自動略過。",
+            f"已在「{command}」開啟 {len(launched)} 個衝突檔案。\n"
+            f"{note}\n"
+            "檔案裡已經標好衝突的三段（目前 source / base / profile 期望），\n"
+            "請解決後**存檔**，全部完成再按「套用」，\n"
+            "工具會把結果寫回專案並重新驗證。\n\n"
+            "尚未解決、或內容仍留著衝突標記的檔案會自動略過。",
             QMessageBox.Apply | QMessageBox.Cancel, QMessageBox.Apply)
         if confirm != QMessageBox.Apply:
             self._append_log("info", "已取消套用，衝突內容仍保留在資料夾中。")
             return
 
-        logger = Logger(sink=self._append_log, log_file=self.log_path, echo_stdout=False)
         result = apply_all(records, logger)
 
         lines = [f"已套用 {len(result.applied)} 個檔案"]
@@ -797,11 +844,17 @@ class MainWindow(QMainWindow):
 
         plans, blocked = [], []
         rule_ids = {r.rule_id for r in profile.all_rules}
+        project_root = self.path_combo.currentText().strip()
         for record in records:
-            if record.rule_id not in rule_ids:
-                continue
-            result = reanchor.plan(profile, record, logger)
-            (plans if result.ok else blocked).append((record, result))
+            # 同一個檔案有多條規則衝突時只有一筆紀錄，rule_id 是 "mod:7,mod:8"；
+            # 每條規則各規劃一組錨點，各自從解決後的內容裡挑自己那一段
+            for rule_id in [x.strip() for x in record.rule_id.split(",") if x.strip()]:
+                if rule_id not in rule_ids:
+                    self._append_log("info", f"略過已不存在的規則 {rule_id}（{record.label}）")
+                    continue
+                result = reanchor.plan(profile, record, logger, project_root=project_root,
+                                       rule_id=rule_id)
+                (plans if result.ok else blocked).append((record, result))
 
         if not plans:
             if blocked:
@@ -812,15 +865,16 @@ class MainWindow(QMainWindow):
 
         lines = [f"已解決 {len(records)} 個衝突。要把結果寫回 profile 嗎？", "",
                  "不寫回的話，換一棵樹或上游再前進時，同樣的衝突要再解一次。", "",
-                 f"將更新 {profile.title} 的以下規則："]
-        lines += [f"　• {record.label}" for record, _ in plans[:10]]
+                 f"將為 {profile.title} 的以下規則各新增一組錨點",
+                 "（原有的錨點與 base 保留，還沒跟上上游的樹仍然套得上）："]
+        lines += [f"　• {result.label or record.label}" for record, result in plans[:10]]
         if len(plans) > 10:
             lines.append(f"　…另有 {len(plans) - 10} 條")
         if blocked:
             lines += ["", f"以下 {len(blocked)} 條無法自動處理，需手動調整："]
-            lines += [f"　• {record.label}：{result.error}" for record, result in blocked[:5]]
-        lines += ["", "會先備份 profile.yaml 與 base 快照，改完後立即讀回驗證，"
-                      "驗證不過就整個放棄。"]
+            lines += [f"　• {result.label or record.label}：{result.error}"
+                      for record, result in blocked[:5]]
+        lines += ["", "會先備份 profile.yaml，改完後立即讀回驗證，驗證不過就整個放棄。"]
 
         confirm = QMessageBox.question(self, APP_NAME, "\n".join(lines),
                                        QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
@@ -836,12 +890,13 @@ class MainWindow(QMainWindow):
                 done += 1
             else:
                 failed.append((record, message))
-                self._append_log("error", f"{record.label}：{message}")
+                self._append_log("error", f"{result.label or record.label}：{message}")
 
         QMessageBox.information(
             self, APP_NAME,
-            f"已更新 {done} 條規則" + (f"，{len(failed)} 條失敗" if failed else "") +
-            "\n\nprofile 與 base 快照的舊版本已備份在同一個資料夾（.bak.<時間戳>）。")
+            f"已為 {done} 條規則新增錨點" + (f"，{len(failed)} 條失敗" if failed else "") +
+            "\n\nprofile.yaml 的舊版本已備份在同一個資料夾（.bak.<時間戳>），\n"
+            "新錨點的 base 存在 base\\_anchors\\ 底下。")
         self.reload_profiles(quiet=False)
 
     def _open_backups(self, preselect=""):

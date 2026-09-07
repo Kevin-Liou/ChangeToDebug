@@ -90,8 +90,9 @@ def audit(profile, base_path, logger, projects=None):
                          target=rule.target_display, section=sections[kind], index=index,
                          regex=rule.regex, current=rule.expect_count)
 
-        old = normalize_newlines(rule.old_code)
-        new = normalize_newlines(rule.new_code)
+        # 多組錨點時，命中數取第一組比對得到的那組；「已套用過」看任一組的 new_code
+        variants = [(normalize_newlines(v.old_code), normalize_newlines(v.new_code))
+                    for v in rule.variants()]
         for path in resolve(rule):
             if not path.is_file():
                 continue
@@ -102,9 +103,9 @@ def audit(profile, base_path, logger, projects=None):
             item.files += 1
             if rule.regex:
                 continue
-            count = text.count(old) if old else 0
+            count = next((text.count(old) for old, _ in variants if old and old in text), 0)
             item.counts.append(count)
-            if count == 0 and new and new in text:
+            if count == 0 and any(new and new in text for _, new in variants):
                 item.applied += 1
 
         if projects is not None:

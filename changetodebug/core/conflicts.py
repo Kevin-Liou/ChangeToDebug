@@ -6,7 +6,7 @@
         HpPlatformPkg/HpPlatformPkg.dsc.base       共同起點（base 快照）
         HpPlatformPkg/HpPlatformPkg.dsc.profile    profile 期望的結果
         HpPlatformPkg/HpPlatformPkg.dsc.current    目前 source 的內容
-        HpPlatformPkg/HpPlatformPkg.dsc.merged     使用者解完後存在這裡
+        HpPlatformPkg/HpPlatformPkg.dsc.merged     預先填好衝突標記，使用者解完存回這裡
         index.yaml                                 清單，供工具讀回
 
 為什麼不像 git 那樣把衝突標記寫進原檔：
@@ -26,6 +26,7 @@ from pathlib import Path
 
 from ..appinfo import app_dir
 from .patcher import normalize_newlines, read_text, write_text
+from .threeway import has_markers, merge_text, render_conflicts
 
 try:
     import yaml
@@ -91,6 +92,39 @@ def run_dir(base_path, run_stamp):
     return project_dir(base_path) / str(run_stamp)
 
 
+def _absorb(record, base_text, ours_text, rule, logger):
+    """同一個檔案的第二條（含以後）衝突規則，併進既有的那筆紀錄。
+
+    原本每條規則各自建一筆紀錄，但檔名只由目標路徑決定，所以第二條會把第一條的
+    .profile 蓋掉——合併工具因此只看得到最後一條規則想改的內容，而且同一個檔案
+    會被開兩次。這裡改成一個檔案一筆紀錄，.profile 用三方合併把兩條規則的期望
+    疊起來（兩者都是「base 套用一條規則」，改的多半不是同一段，合得起來）。
+    """
+    try:
+        stored = normalize_newlines(Path(record.profile).read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.debug(f"讀不回既有的 profile 內容，保留先到的那條：{record.profile} -> {exc}")
+        return record
+
+    combined = merge_text(base_text, stored, ours_text)
+    if combined.conflicts:
+        # 兩條規則改到同一段。這種情況少見，硬合只會產生假的期望值，
+        # 保留先到的那條，並在記錄裡講清楚。
+        logger.warn(f"同一檔案的兩條規則改到同一段，衝突檔只呈現先到的那條："
+                    f"{record.target}  ({record.label} / {rule.label})")
+    else:
+        try:
+            Path(record.profile).write_text(combined.text, encoding="utf-8", newline="\n")
+        except Exception as exc:
+            logger.debug(f"合併後的 profile 寫出失敗：{record.profile} -> {exc}")
+
+    if rule.label and rule.label not in record.label.split("、"):
+        record.label = f"{record.label}、{rule.label}"
+    if rule.rule_id and rule.rule_id not in record.rule_id.split(","):
+        record.rule_id = f"{record.rule_id},{rule.rule_id}"
+    return record
+
+
 def make_writer(base_path, run_stamp, logger):
     """回傳 write(target, base_text, ours_text, current_text, rule, count, ...) 供修補引擎呼叫。
 
@@ -98,9 +132,14 @@ def make_writer(base_path, run_stamp, logger):
     """
     root = run_dir(base_path, run_stamp)
     records = []
+    by_target = {}
 
     def write(target, base_text, ours_text, current_text, rule, count,
               encoding="utf-8", newline="\n"):
+        key = os.path.normcase(os.path.abspath(str(target)))
+        if key in by_target:
+            return _absorb(by_target[key], base_text, ours_text, rule, logger)
+
         try:
             rel = Path(target).resolve().relative_to(Path(base_path).resolve())
         except ValueError:
@@ -120,11 +159,58 @@ def make_writer(base_path, run_stamp, logger):
             logger.warn(f"衝突產物寫出失敗（不影響其他項目）：{target} -> {exc}")
             return None
         records.append(record)
+        by_target[key] = record
         return record
 
     write.root = root
     write.records = records
     return write
+
+
+def build_merged(record, logger=None, overwrite=False):
+    """依三方內容產生 .merged——預先填好 diff3 衝突標記的檔案。
+
+    這個檔案是整個人工解決流程的核心。合併工具（`code --merge` 的第四個參數）
+    要求輸出檔必須已經存在，否則只會顯示「找不到檔案」；就算不用合併工具，
+    使用者也需要一份帶標記的檔案才知道要改哪裡。
+
+    overwrite=False 時已存在且非空的檔案不會被覆蓋——那可能是使用者辛苦解完的
+    成果，重生成等於把它丟掉。
+
+    回傳 (是否可用, 說明)。
+    """
+    path = Path(record.merged)
+    if not overwrite and path.is_file() and path.stat().st_size > 0:
+        return True, "已存在"
+    try:
+        base = normalize_newlines(Path(record.base).read_text(encoding="utf-8"))
+        profile = normalize_newlines(Path(record.profile).read_text(encoding="utf-8"))
+        current = normalize_newlines(Path(record.current).read_text(encoding="utf-8"))
+    except Exception as exc:
+        return False, f"讀不到三方內容：{exc}"
+
+    result = merge_text(base, profile, current)
+    text = render_conflicts(result)
+    record.count = len(result.conflicts) or record.count
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8", newline="\n")
+    except Exception as exc:
+        return False, f"寫出失敗：{exc}"
+    if logger is not None:
+        logger.debug(f"已產生待解決檔案（{len(result.conflicts)} 處衝突）：{path}")
+    return True, "已產生"
+
+
+def build_all_merged(records, logger, overwrite=False):
+    """整批產生 .merged，回傳 [(record, 失敗原因)]。"""
+    failed = []
+    for record in records:
+        ok, message = build_merged(record, logger, overwrite=overwrite)
+        if not ok:
+            failed.append((record, message))
+            logger.warn(f"待解決檔案產生失敗：{record.target} -> {message}")
+    return failed
 
 
 def refresh_current(records, logger):
@@ -201,13 +287,15 @@ def apply_resolved(record, logger):
     except Exception as exc:
         return False, f"讀取解決後的內容失敗：{exc}"
 
+    # 有些編輯器存檔時會補上 BOM；原封不動寫回去會在檔頭多一個看不見的字元
+    merged = merged.lstrip("\ufeff")
+
     if not merged.strip():
         return False, "解決後的內容是空的，未寫入"
 
     # 使用者若直接存下含衝突標記的檔案，寫進 BIOS source 會造成更難查的問題
-    for marker in ("<<<<<<<", "=======", ">>>>>>>"):
-        if marker in merged:
-            return False, f"內容仍含衝突標記 {marker}，未寫入"
+    if has_markers(merged):
+        return False, "尚未解決（內容仍是衝突標記），未寫入"
 
     try:
         current = normalize_newlines(read_text(record.target)[0])

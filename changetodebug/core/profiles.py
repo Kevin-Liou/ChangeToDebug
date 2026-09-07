@@ -45,7 +45,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..appinfo import profile_search_dirs
-from .patcher import Rule
+from .patcher import Anchor, Rule
 
 try:
     import yaml
@@ -116,6 +116,7 @@ class Profile:
     base_commits: dict = field(default_factory=dict)    # {repo 子路徑: commit}，'' 代表專案根目錄
     package_dir: str = ""                               # 目錄型 profile 的套件目錄（單檔型為空）
     base_snapshot: object = None                        # BaseSnapshot；單檔型為 None
+    base_warnings: list = field(default_factory=list)   # 載入時 manifest 重新對應的說明
     source_path: str = ""
     load_error: str = ""
 
@@ -219,6 +220,28 @@ def _key_from_filename(path):
     return (m.group(1) if m else stem).strip()
 
 
+def _build_anchors(raw_list):
+    """規則的 anchors 清單 -> [Anchor]。少了 old_code 的項目沒有用處，直接略過。"""
+    anchors = []
+    for item in raw_list or []:
+        if not isinstance(item, dict):
+            continue
+        old_code = item.get("old_code", "") or ""
+        if not old_code:
+            continue
+        covers = item.get("covers") or []
+        if isinstance(covers, str):
+            covers = [covers]
+        anchors.append(Anchor(
+            old_code=old_code,
+            new_code=item.get("new_code", "") or "",
+            base_file=str(item.get("base_file", "") or "").replace("\\", "/"),
+            covers=[str(c) for c in covers],
+            note=str(item.get("note", "") or ""),
+        ))
+    return anchors
+
+
 def _build_rules(raw_list, source, key_prefix):
     rules = []
     for index, item in enumerate(raw_list or []):
@@ -240,6 +263,7 @@ def _build_rules(raw_list, source, key_prefix):
             option_debug_flag=bool(item.get("option_debug_flag", False)),
             note=str(item.get("note", "") or ""),
             source=source,
+            anchors=_build_anchors(item.get("anchors")),
         ))
     return rules
 
@@ -361,6 +385,8 @@ def load_profile_file(path, package_dir=None):
         from .basesnap import load_snapshot
         profile.package_dir = str(package_dir)
         profile.base_snapshot = load_snapshot(package_dir)
+        # 使用者刪了或搬了規則之後 mod:N 會位移；manifest 得跟著對回來，否則會配錯 base
+        profile.base_warnings = profile.base_snapshot.realign(profile.all_rules)
 
     if not profile.all_rules:
         profile.load_error = "檔案中沒有任何 modifications / platform_pcd_modifications"

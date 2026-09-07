@@ -3,8 +3,8 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from .conflicts import (make_writer as make_conflict_writer, refresh_current,
-                        write_index)
+from .conflicts import (build_all_merged, make_writer as make_conflict_writer,
+                        refresh_current, write_index)
 from .patcher import PatchEngine, PatchStats
 from .tasks import RunContext, get_task
 from .verifier import VerifySummary, verify
@@ -109,6 +109,10 @@ def execute(request, logger, cancel_check=None, progress_cb=None):
     if conflict_writer is not None and conflict_writer.records:
         # 衝突檔案在 task 層被還原過，以還原後的最終狀態為準
         refresh_current(conflict_writer.records, logger)
+        # .merged 一定要在 refresh_current 之後才產生：合併當下取的 current 可能是
+        # 同檔其他規則改到一半的狀態，而衝突發生後整個檔案會被還原。以最終狀態為準，
+        # 使用者在合併工具裡看到的才是他現在真正的檔案。
+        build_all_merged(conflict_writer.records, logger, overwrite=True)
         summary.conflicts = list(conflict_writer.records)
         summary.conflict_dir = str(conflict_writer.root)
         write_index(conflict_writer.root, summary.conflicts, logger)

@@ -17,14 +17,7 @@
 #include <Nvl/Pch/GpioV2PinsNvlPchS.h>
 #include <PlatformDefinitions.h>
 #include <HpPlatformId.h>
-
-#define HPGP_GFX_ID0            GPIOV2_NVL_PCH_S_GPP_B_7
-#define HPGP_GFX_ID1            GPIOV2_NVL_PCH_S_GPP_B_8
-#define HPGP_GFX_ID2            GPIOV2_NVL_PCH_S_GPP_B_9
-
-#define OPTION_CARD_NONE        0x00    // No option card
-#define OPTION_CARD_BOPPER      0x02    // RTX5050 50W GN22-X2 8GB - dGPU
-#define OPTION_CARD_BABBAGE     0x03    // 1x M.2 SSD Adapter      - M.2 SSD 3
+#include <HpVpinSelection.h>
 
 //
 // HpDtPortingExpansionSlotConfigDxe names the M.2 SSD slots by the order they appear in this table,
@@ -53,35 +46,6 @@ static EXPANSION_SLOT_DEFINITION mSlotDefinitionWithThirdSsd[MAX_SLOTS] =
    {PCH_SLOT(4),     PCIE_M2_WLAN_BT_SLOT}, // M.2 WLAN/BT   - PCH PCIe root port 4 (00/1C/03), see PcdWlanPcieBridgeNum
    {CPU_SLOT_EX(3),  PCIE_M2_SSD_SLOT},     // M.2 SSD 3     - CPU PCIe root port 3, Flex I/O lane B0~B7, Babbage option card
 };
-
-/**
-  @brief Report whether the Babbage "1x M.2 SSD Adapter" option card is installed.
-
-  Only Manaan PG boards carry the PCIe x16 option card connector, Manaan P and Manaan M do not. The
-  dGPU option cards use the same connector, so they are mutually exclusive with the third M.2 SSD.
-
-  @retval TRUE    The option card providing M.2 SSD 3 is installed.
-  @retval FALSE   No option card, or a dGPU option card, is installed.
-**/
-static
-BOOLEAN
-IsThirdSsdCardInstalled (
-   VOID
-   )
-{
-   UINT8  OptionCardId;
-
-   if (PcdGet16 (PcdDtPcaId) != BOARD_ID_DM800_PG)
-   {
-      return FALSE;
-   }
-
-   OptionCardId = (UINT8)((HpGpioRead (HPGP_GFX_ID2) << 2) |
-                          (HpGpioRead (HPGP_GFX_ID1) << 1) |
-                          HpGpioRead (HPGP_GFX_ID0));
-
-   return (BOOLEAN)(OptionCardId == OPTION_CARD_BABBAGE);
-}
 
 EXPANSION_SLOT_DEFINITION *
 GetSlotDefinition(

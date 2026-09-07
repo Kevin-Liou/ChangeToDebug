@@ -20,6 +20,10 @@
 pip install -r requirements.txt
 ```
 
+直接雙擊 `ChangeToDebug_Start.pyw` 啟動，不會附帶主控台視窗。
+
+要看主控台輸出（例如 `--version`、`--debug`）時改用：
+
 ```bash
 python ChangeToDebug_Start.py
 ```
@@ -159,6 +163,10 @@ profile 有兩種形態，兩種都能載入：
 
 - 上游改的是別處 → 自動合併，雙方改動都保留
 - 上游改到同一段 → 報衝突、**整個檔案不寫入**，三方內容存到 `ChangeToDebug_conflicts\<專案名>\<時間戳>\`，可按「解決衝突…」用合併工具處理
+  - 每個檔案會產生四份：`.base`（共同起點）、`.current`（專案現況）、`.profile`（規則期望）、`.merged`（**預先填好 `<<<<<<<` 衝突標記，解完存這裡**）
+  - 按「解決衝突…」會用 `merge_tool_command`（預設 `code`）開啟`--merge <current> <profile> <base> <merged>`；沒有合併工具時，直接用任何文字編輯器改 `.merged` 也可以
+  - 解完按「套用」寫回專案。內容為空、仍留著衝突標記、或與現況相同的檔案會自動略過
+  - 套用後可選擇寫回 profile：以**新增一組錨點**（規則的 `anchors`）記下新上游的 `old_code`/`new_code` 與 base，原有的錨點保留。之後套用時逐組比對、自動挑能用的那一組，所以還沒跟上上游的樹照樣套得上，同一份 profile 服務多個上游版本
 
 沒有 base 的規則會退回原本的字串比對，行為不變。`base_manifest.yaml` 逐條記錄哪些規則有 base、哪些沒有以及原因。
 
@@ -198,7 +206,8 @@ profile 有兩種形態，兩種都能載入：
 ## 專案結構
 
 ```
-ChangeToDebug_Start.py        進入點
+ChangeToDebug_Start.pyw       進入點（雙擊啟動，不帶主控台視窗）
+ChangeToDebug_Start.py        進入點（內容相同，會附帶主控台，供命令列與 CI 使用）
 changetodebug/
   appinfo.py                  版本、路徑解析（相容 PyInstaller）
   app.py                      argparse + QApplication
@@ -215,7 +224,7 @@ changetodebug/
     basesnap.py               base 快照（改動前的原始檔）讀寫與擷取
     threeway.py               三方合併（diff3）
     conflicts.py              合併衝突的產物與解決流程
-    reanchor.py               解完衝突後把結果寫回 profile（重新錨定）
+    reanchor.py               解完衝突後以新增錨點的方式寫回 profile（重新錨定）
     audit.py                  命中數盤點與 expect_count 建議
     tasks/                    功能實作（新增功能只要在此註冊）
       base.py  patchset.py  driver_debug.py  outp_marker.py
@@ -238,6 +247,27 @@ profiles/
 FY27 與前兩代性質不同，套用後還有兩件工具不會做的事：新增的 6 個檔案要 `git add`，第一次 build 前要 `touch HpPlatformPkg/AcpiTables/Dt/Dsdt/Dsdt.asl`（否則 build system 不會重編 ACPI table）。詳見 profile 檔開頭的說明與 code change 套件的 README。
 
 新增一個「功能分頁」只要三步：`core/tasks/` 新增一個 `Task` 子類別 → 在 `core/tasks/__init__.py` `register()` → `gui/pages.py` 加一個 `TaskPage` 子類別並放進 `PAGE_CLASSES`。
+
+---
+
+## 版本紀錄
+
+### v3.3.0（2026-09-07）
+
+- **多錨點規則（`anchors`）**：解決衝突後寫回 profile 改為「新增一組錨點」而不是覆蓋原本的 `old_code`。套用時逐組精確比對、都比對不到才依各組 base 與現況的相似度做 3-way merge。同一份 profile 因此能同時服務還沒跟上上游與已經跟上的樹，連同一棵樹裡不同專案處於不同上游狀態也能各自命中
+- **人工解決衝突終於可用**：`.merged` 從未被建立，`code --merge` 開不了第四個參數指向的檔案。現在會預先填好 diff3 衝突標記，沒有合併工具用記事本改也行；同檔多規則併成一筆不再開兩次；`=======` 分隔線不再被誤判成未解決的標記；存檔帶 BOM 會被去掉
+- **重新錨定更穩**：忽略只有行尾空白的假差異；解決後有多段改動時挑含本規則新增行的那段；同檔多規則逐條規劃；一次寫回多筆不再互相覆蓋
+- **base manifest 自我對齊**：規則被刪除或搬動後 `mod:N` 編號位移，載入時依 `sub_path` / `label` 重新對應並在記錄提示，不會再拿錯的 base 去合
+- 下拉選單與微調框補回箭頭圖示（QSS 接管後 Qt 不再畫原生箭頭，改以執行時產生的 PNG）
+- 新增 `ChangeToDebug_Start.pyw`：雙擊啟動不帶主控台視窗；啟動失敗時寫 `ChangeToDebug_error.txt` 並跳訊息框
+- FY27：`PlatformBootOrderLib.c` / `.inf` 與 `ExpansionSlotLib.inf` 各帶第二組錨點（HpNvlPlat4 上游）；移除 Z21 `ExpansionSlots.c` 三條規則
+
+### 更早
+
+- v3.2.0 主題下拉選單，16 組編輯器配色
+- v3.1.0 備份清理、載入時的警告、版面加大
+- v3.0.0 目錄型 profile、base 快照、3-way merge
+- v2.0.0 三個工具整併成一個 profile 驅動的 GUI
 
 ---
 

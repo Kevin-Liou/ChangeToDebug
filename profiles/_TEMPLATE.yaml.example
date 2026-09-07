@@ -99,6 +99,22 @@ profile:
 # 「插入型」規則（new_code 完整包含 old_code，例如只是在原內容旁邊補幾行）是允許的：
 # 工具會先檢查 new_code 是否已存在，已存在就回報「已套用過」，重跑不會重複插入。
 #
+# anchors            同一個修改在其他上游版本上的 old_code / new_code（選填）。通常不用手寫：
+#                    解決合併衝突後選「寫回 profile」，工具會自動加一組，原本的保留不動。
+#                    套用時先逐組精確比對，第一組比對到的就用；都比對不到才依各組 base 與
+#                    現況的相似度做 3-way merge。這樣還沒跟上上游的樹與已經跟上的樹都套得上。
+#                    每組可帶 base_file（相對 base/ 目錄）與 covers（這份 base 取自哪個檔案）。
+#                    例：
+#                      anchors:
+#                        - note: "20260907 於 HpNvlPlat4 解決衝突後新增"
+#                          base_file: "_anchors/20260907110244/HpPlatformPkg/.../X.inf"
+#                          covers:
+#                            - "HpPlatformPkg/.../X.inf"
+#                          old_code: |2
+#                            ...
+#                          new_code: |2
+#                            ...
+#
 # label / note 若以 [ 開頭或含有冒號，記得用單引號括起來，否則會被 YAML 誤判。
 # ============================================================
 modifications:

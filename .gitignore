@@ -119,6 +119,7 @@ failed/*
 # ChangeToDebug 執行期產生的檔案
 ChangeToDebug_settings.json
 ChangeToDebug_log.txt
+ChangeToDebug_error.txt
 ChangeToDebug_conflicts/
 last_path_config.json
 debug_mode_modify_log.txt
