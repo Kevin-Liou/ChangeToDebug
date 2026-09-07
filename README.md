@@ -234,6 +234,8 @@ changetodebug/
 profiles/
   FY25/  FY26/  FY27/        目錄型 profile（profile.yaml + base/ + base_manifest.yaml）
   _TEMPLATE.yaml.example
+tests/                        回歸檢查（python tests/run_checks.py，見 tests/README.md）
+CLAUDE.md                     接手須知：不變量、脆弱點、環境、git 規矩
 ```
 
 ### 已內建的世代
@@ -247,6 +249,62 @@ profiles/
 FY27 與前兩代性質不同，套用後還有兩件工具不會做的事：新增的 6 個檔案要 `git add`，第一次 build 前要 `touch HpPlatformPkg/AcpiTables/Dt/Dsdt/Dsdt.asl`（否則 build system 不會重編 ACPI table）。詳見 profile 檔開頭的說明與 code change 套件的 README。
 
 新增一個「功能分頁」只要三步：`core/tasks/` 新增一個 `Task` 子類別 → 在 `core/tasks/__init__.py` `register()` → `gui/pages.py` 加一個 `TaskPage` 子類別並放進 `PAGE_CLASSES`。
+
+---
+
+## 架構與資料流
+
+一次「開始執行」走這條路：
+
+```
+gui/main_window  ──RunRequest──▶  core/runner.execute
+                                    │  每個 task_key 一個 Task（core/tasks/）
+                                    ▼
+                      tasks/patchset.PatchsetTask
+                        _collect_jobs：new_files → modifications → platform_pcd_modifications，
+                                       file_name 型依 pcd_scan_roots 展開到每個專案、再依使用者勾選的專案過濾
+                        以「檔案」分組 → 逐條  PatchEngine.apply(file, rule, base_ref, anchor_refs)
+                        同檔任一條 合併衝突 → _rollback 整檔還原
+                                    │
+                                    ▼
+                      core/patcher.PatchEngine.apply          ← 多錨點挑選器
+                        1. rule.variants() 逐組精確比對（含「已套用過」）  → _apply_single
+                        2. 都不中：各組 base 依相似度排序，_merge_with_base 做 3-way
+                             成功 → 已合併（寫入前確認 added_lines 都在）
+                             衝突 → conflict_sink(三方內容)，回 合併衝突，檔案不動
+                             base 不像 / 借用的 base 衝突 → None，退回 3.
+                        3. 找不到片段（+ diagnose 最相似區塊）
+                                    │
+                                    ▼
+                      core/conflicts（衝突時）
+                        make_writer 寫 .base/.profile/.current 到 ChangeToDebug_conflicts/<專案>/<時間戳>/
+                        同檔第二條規則 _absorb 併入同一筆（rule_id 變 "mod:7,mod:8"）
+                        跑完：refresh_current → build_all_merged（預填 diff3 標記）→ write_index
+```
+
+解衝突與寫回：
+
+```
+「解決衝突…」→ _resolve_conflicts
+   去重 → build_all_merged(overwrite=False) 補齊缺的 .merged → 每檔 Popen(code --merge current profile base merged)
+   使用者存檔後按「套用」→ conflicts.apply_all：空 / 仍有標記 / 與現況相同 → 略過；否則寫回專案（還原 CRLF、去 BOM）
+   → _offer_reanchor：複合 rule_id 拆開，每條 reanchor.plan（濾純空白 hunk、挑含本規則新增行的那段）
+   → reanchor.apply：append_anchor 定點插進 profile.yaml + 寫 base/_anchors/<時間戳>/…；主 base 與 manifest 不動
+```
+
+狀態字彙（`core/patcher.py`）：`已修改`、`預覽通過`、`已套用過`、`規則無變化`、`已新增`、`已合併` 算成功（`GOOD_STATUS`）；`找不到片段`、`檔案不存在`、`錯誤`、`已存在且不同`、`合併衝突`、`已還原` 算失敗；`略過` 是使用者取消勾選或選配未啟用。
+
+會決定行為的常數：`MIN_BASE_SIMILARITY = 0.5`（base 與現況不像就不 merge）、`expect_count`（宣告了就必須剛好相符）、`BaseRef.approximate`（借用別的專案的 base 不報衝突）。
+
+profile 載入（`core/profiles.py`）：目錄型優先於單檔；載入後 `BaseSnapshot.realign()` 依 `sub_path`/`label` 把 manifest 對回目前的規則編號；`Profile.base_warnings` 有內容代表 manifest 落後於 profile.yaml。
+
+---
+
+## 接手須知
+
+- **先跑 `python tests/run_checks.py`**，改完再跑一次。夾具是合成的，不需要 BIOS 樹；`check_live_env.py` 在有 `G:\HpNvlPlat1` 時會多跑一次真實預覽。
+- 改程式前讀 [CLAUDE.md](CLAUDE.md)：不變量（衝突不寫原檔、profile.yaml 只能定點置換、重新錨定只新增不覆蓋、rule_id 是位置）、脆弱點（`|2+` 尾端空行、Windows 的 `.cmd` 與 `pythonw`、QSS 箭頭）、環境與 git 規矩。
+- 設計理由大多寫在程式碼裡以「為什麼」開頭的註解，改動前先讀該函式的 docstring。
 
 ---
 
